@@ -1,0 +1,222 @@
+/* Main App Layout */
+.app-layout {
+  display: flex;
+  height: 100vh;
+  background: #f8fafc;
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: 280px;
+  transition: margin-left 0.3s ease;
+  overflow: hidden;
+}
+
+.sidebar.collapsed ~ .main-content {
+  margin-left: 80px;
+}
+
+/* Page Header */
+.page-header {
+  background: white;
+  padding: 24px 32px;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.date-time {
+  font-size: 14px;
+  color: #718096;
+  font-weight: 500;
+}
+
+/* Page Body */
+.page-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+  background: #f8fafc;
+}
+
+.page-body > * {
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Page Body Scrollbar */
+.page-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.page-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.page-body::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+}
+
+.page-body::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Container Styles */
+.page-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+}
+
+.page-container-full {
+  background: transparent;
+  padding: 0;
+}
+
+/* Card Styles */
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0;
+}
+
+/* Grid Layout */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+/* Responsive Grid */
+@media (max-width: 1200px) {
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 70px;
+  }
+
+  .sidebar.collapsed ~ .main-content {
+    margin-left: 70px;
+  }
+
+  .page-header {
+    padding: 16px 20px;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
+
+  .page-body {
+    padding: 16px;
+  }
+
+  .page-container {
+    padding: 16px;
+  }
+
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .header-right {
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-header {
+    padding: 12px 16px;
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .page-body {
+    padding: 12px;
+  }
+
+  .page-container {
+    padding: 12px;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

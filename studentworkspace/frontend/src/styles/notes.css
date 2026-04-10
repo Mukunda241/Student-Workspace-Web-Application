@@ -1,0 +1,916 @@
+/* ==================== NOTES CONTAINER ==================== */
+.notes-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+}
+
+/* ==================== NAVIGATION BAR ==================== */
+.navbar {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  padding: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-content {
+  max-width: 2000px;
+  margin: 0 auto;
+  padding: 1.2rem 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.app-title {
+  color: white;
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  flex: 1;
+  margin-left: 3rem;
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.nav-right {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+.user-info {
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 0.6rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.btn-logout {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.btn-logout:hover {
+  background-color: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3);
+}
+
+/* ==================== MAIN LAYOUT ==================== */
+.notes-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ==================== SIDEBAR ==================== */
+.notes-sidebar {
+  width: 300px;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.notes-sidebar.collapsed {
+  width: 60px;
+}
+
+.sidebar-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sidebar-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #1f2937;
+  transition: all 0.3s ease;
+}
+
+.notes-sidebar.collapsed .sidebar-header h2 {
+  display: none;
+}
+
+.btn-toggle-sidebar {
+  background: none;
+  border: 1px solid #e5e7eb;
+  color: #374151;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-toggle-sidebar:hover {
+  background-color: #f3f4f6;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+/* ==================== CREATE NOTE FORM ==================== */
+.btn-create-note {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 0.75rem 1rem;
+  margin: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  width: calc(100% - 2rem);
+}
+
+.btn-create-note:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.create-note-form {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.form-input,
+.form-select {
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.form-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.form-buttons .btn-primary {
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  flex: 1;
+  margin: 0;
+}
+
+.form-buttons .btn-secondary {
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  flex: 1;
+  margin: 0;
+}
+
+.form-buttons .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================== SEARCH & FILTERS ==================== */
+.search-box {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.filter-section {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.filter-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-select {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* ==================== TAGS ==================== */
+.tags-section {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tags-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tag-button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  margin: 0.25rem 0;
+  background: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #6b7280;
+  transition: all 0.3s ease;
+}
+
+.tag-button:hover {
+  border-color: #2563eb;
+  background-color: #f3f4f6;
+  color: #2563eb;
+}
+
+.tag-button.active {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-color: #2563eb;
+  color: #0c4a6e;
+  font-weight: 600;
+}
+
+/* ==================== NOTES LIST ==================== */
+.notes-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 0;
+}
+
+.notes-group {
+  margin-bottom: 1rem;
+}
+
+.group-title {
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #2563eb;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: #f3f4f6;
+  sticky: top;
+}
+
+.note-item {
+  padding: 0.75rem 1rem;
+  margin: 0.25rem 0;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+  border-left: 3px solid transparent;
+}
+
+.note-item:hover {
+  background-color: #f9fafb;
+  border-left-color: #2563eb;
+}
+
+.note-item.active {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-left-color: #2563eb;
+}
+
+.note-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.note-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-preview {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-delete-note {
+  background: none;
+  border: 1px solid #e5e7eb;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-delete-note:hover {
+  background-color: #fee2e2;
+  border-color: #dc2626;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #9ca3af;
+}
+
+.empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* ==================== EDITOR CONTAINER ==================== */
+.editor-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  overflow: hidden;
+}
+
+.editor-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.editor-title-section {
+  flex: 1;
+}
+
+.editor-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.note-meta {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.success-badge {
+  background-color: #dcfce7;
+  color: #15803d;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.editor-workspace {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.uploading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: white;
+  z-index: 50;
+  border-radius: 8px;
+}
+
+.editor-workspace.drag-over {
+  background-color: #f0fdf4;
+  border: 3px dashed #10b981;
+}
+
+/* ==================== SPLIT EDITOR ==================== */
+.editor-split {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 0;
+}
+
+.editor-pane,
+.preview-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-pane {
+  border-right: 1px solid #e5e7eb;
+}
+
+.pane-header {
+  padding: 1rem 1.5rem;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pane-header label {
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.toolbar-button {
+  background-color: white;
+  border: 1px solid #d1d5db;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.toolbar-button:hover {
+  background-color: #f3f4f6;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.markdown-editor {
+  flex: 1;
+  padding: 1.5rem;
+  border: none;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  color: #1f2937;
+  resize: none;
+  outline: none;
+  line-height: 1.6;
+  background: white;
+}
+
+.markdown-editor:focus {
+  outline: none;
+}
+
+.markdown-editor::placeholder {
+  color: #d1d5db;
+  opacity: 0.8;
+}
+
+.editor-hint {
+  padding: 0.75rem 1.5rem;
+  background-color: #eff6ff;
+  color: #2563eb;
+  font-size: 0.8rem;
+  border-top: 1px solid #dbeafe;
+  flex-shrink: 0;
+}
+
+.markdown-preview {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+  color: #1f2937;
+  line-height: 1.7;
+}
+
+.markdown-preview h1 {
+  font-size: 2em;
+  margin: 1em 0 0.5em 0;
+  font-weight: 700;
+}
+
+.markdown-preview h2 {
+  font-size: 1.5em;
+  margin: 0.8em 0 0.4em 0;
+  font-weight: 700;
+}
+
+.markdown-preview h3 {
+  font-size: 1.25em;
+  margin: 0.6em 0 0.3em 0;
+  font-weight: 600;
+}
+
+.markdown-preview p {
+  margin: 1em 0;
+}
+
+.markdown-preview ul {
+  margin: 1em 0;
+  padding-left: 2em;
+}
+
+.markdown-preview li {
+  margin: 0.5em 0;
+}
+
+.markdown-preview code {
+  background: #f3f4f6;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.markdown-preview strong {
+  font-weight: 700;
+}
+
+.markdown-preview em {
+  font-style: italic;
+}
+
+.markdown-preview a {
+  color: #2563eb;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.markdown-preview a:hover {
+  text-decoration: underline;
+  color: #1e40af;
+}
+
+/* ==================== EMPTY EDITOR ==================== */
+.empty-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+.empty-editor .empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.empty-editor h3 {
+  margin: 0 0 0.5rem 0;
+  color: #1f2937;
+  font-size: 1.25rem;
+}
+
+.empty-editor p {
+  margin: 0 0 1.5rem 0;
+  font-size: 1rem;
+  color: #9ca3af;
+}
+
+/* ==================== BUTTONS ==================== */
+.btn-primary {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.btn-secondary {
+  background-color: #e5e7eb;
+  color: #374151;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background-color: #d1d5db;
+  transform: translateY(-2px);
+}
+
+/* ==================== ERROR MESSAGE ==================== */
+.error-message {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #fee2e2;
+  color: #991b1b;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #dc2626;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+  z-index: 1000;
+}
+
+.error-message button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  color: #2563eb;
+  font-weight: 600;
+  z-index: 999;
+}
+
+/* ==================== SCROLLBARS ==================== */
+.notes-list::-webkit-scrollbar,
+.markdown-preview::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notes-list::-webkit-scrollbar-track,
+.markdown-preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notes-list::-webkit-scrollbar-thumb,
+.markdown-preview::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.notes-list::-webkit-scrollbar-thumb:hover,
+.markdown-preview::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* ==================== RESPONSIVE DESIGN ==================== */
+@media (max-width: 1024px) {
+  .editor-split {
+    flex-direction: column;
+  }
+
+  .editor-pane {
+    flex: 0.5;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .preview-pane {
+    flex: 0.5;
+    border-right: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .notes-sidebar {
+    position: absolute;
+    left: 0;
+    top: 60px;
+    width: 250px;
+    height: calc(100vh - 60px);
+    z-index: 40;
+    border-right: none;
+    border-bottom-right-radius: 8px;
+    box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .notes-sidebar.collapsed {
+    width: 0;
+    overflow: hidden;
+  }
+
+  .notes-main {
+    position: relative;
+  }
+
+  .editor-container {
+    width: 100%;
+  }
+
+  .editor-split {
+    flex-direction: column;
+  }
+
+  .editor-pane {
+    flex: 0.5;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .preview-pane {
+    flex: 0.5;
+  }
+
+  .editor-header {
+    padding: 1rem 1.5rem;
+  }
+
+  .editor-title {
+    font-size: 1.25rem;
+  }
+
+  .markdown-editor,
+  .markdown-preview {
+    padding: 1rem;
+    font-size: 0.9rem;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    margin-left: 1rem;
+    gap: 0.5rem;
+  }
+
+  .nav-content {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .editor-split {
+    flex-direction: column;
+  }
+
+  .editor-pane,
+  .preview-pane {
+    flex: 1;
+  }
+
+  .editor-container {
+    padding: 0;
+  }
+
+  .editor-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .editor-title {
+    font-size: 1rem;
+  }
+
+  .pane-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .markdown-editor,
+  .markdown-preview {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .toolbar-button {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .notes-sidebar {
+    width: 100%;
+    height: auto;
+    max-height: 50vh;
+    position: static;
+    border-right: 1px solid #e5e7eb;
+  }
+
+  .empty-icon {
+    font-size: 2rem !important;
+  }
+}
