@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
 import { projectService } from '../services/authService';
+import { MdAssignment, MdRocketLaunch, MdSchedule, MdTrendingUp } from 'react-icons/md';
 import '../styles/projects.css';
 
 export const Projects = () => {
@@ -395,28 +396,76 @@ export const Projects = () => {
         {!focusMode && projects.length > 0 && (
           <section className="stats-overview">
             <div className="stat-card">
-              <div className="stat-icon">📊</div>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '52px',
+                height: '52px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                marginRight: '1rem'
+              }}>
+                <MdAssignment size={28} style={{color: '#60a5fa'}} />
+              </div>
               <div className="stat-content">
                 <span className="stat-label">Total Projects</span>
                 <span className="stat-value">{calculateStats().totalProjects}</span>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">🚀</div>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '52px',
+                height: '52px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #047857 0%, #065f46 100%)',
+                boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)',
+                marginRight: '1rem'
+              }}>
+                <MdRocketLaunch size={28} style={{color: '#6ee7b7'}} />
+              </div>
               <div className="stat-content">
                 <span className="stat-label">Active Now</span>
                 <span className="stat-value">{calculateStats().activeProjects}</span>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">⏰</div>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '52px',
+                height: '52px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #b45309 0%, #92400e 100%)',
+                boxShadow: '0 4px 12px rgba(180, 83, 9, 0.25)',
+                marginRight: '1rem'
+              }}>
+                <MdSchedule size={28} style={{color: '#fcd34d'}} />
+              </div>
               <div className="stat-content">
                 <span className="stat-label">Due Soon (7 days)</span>
                 <span className="stat-value">{calculateStats().approachingDeadlines}</span>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">📈</div>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '52px',
+                height: '52px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)',
+                marginRight: '1rem'
+              }}>
+                <MdTrendingUp size={28} style={{color: '#e9d5ff'}} />
+              </div>
               <div className="stat-content">
                 <span className="stat-label">Overall Progress</span>
                 <span className="stat-value">{calculateStats().overallCompletion}%</span>
