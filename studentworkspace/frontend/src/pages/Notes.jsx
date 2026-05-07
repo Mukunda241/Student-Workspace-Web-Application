@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
+import { MdMenuBook, MdNote } from 'react-icons/md';
 import '../styles/notes.css';
 
 const Notes = () => {
@@ -365,7 +366,10 @@ const Notes = () => {
       {/* Navigation */}
       <nav className="navbar">
         <div className="nav-content">
-          <h1 className="app-title">📚 Student Workspace</h1>
+          <h1 className="app-title">
+            <MdMenuBook style={{display: 'inline-block', marginRight: '0.5rem'}} size={28} />
+            Student Workspace
+          </h1>
           <div className="nav-links">
             <a href="/dashboard" className="nav-link">Dashboard</a>
             <a href="/projects" className="nav-link">Projects</a>
@@ -392,7 +396,21 @@ const Notes = () => {
         {/* Left Sidebar */}
         <aside className={`notes-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="sidebar-header">
-            <h2>📝 Notes</h2>
+            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25)'
+              }}>
+                <MdNote size={24} style={{color: '#e9d5ff'}} />
+              </div>
+              <h2>Notes</h2>
+            </div>
             <button
               className="btn-toggle-sidebar"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
