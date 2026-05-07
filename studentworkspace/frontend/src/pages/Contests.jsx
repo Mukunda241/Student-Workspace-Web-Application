@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
+import { MdAccessTime, MdEmojiEvents, MdSchedule, MdBell, MdNotifications } from 'react-icons/md';
 import { API_BASE } from '../utils/constants';
 import '../styles/contests.css';
 
@@ -312,7 +313,26 @@ const Contests = () => {
         {/* Header Section */}
         <div className="contests-header">
           <div>
-            <h1>🏆 Contest Center</h1>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              marginBottom: '0.5rem'
+            }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '64px',
+                height: '64px',
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+                boxShadow: '0 6px 16px rgba(217, 119, 6, 0.3)'
+              }}>
+                <MdEmojiEvents size={40} style={{color: '#fef3c7'}} />
+              </div>
+              <h1>Contest Center</h1>
+            </div>
             <p>The Pulse of the Competitive Programmer's Life</p>
           </div>
         </div>
@@ -321,7 +341,21 @@ const Contests = () => {
         {nextContest && (
           <div className="countdown-card">
             <div className="countdown-header">
-              <h3>⏱️ Next Contest</h3>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '56px',
+                height: '56px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #b45309 0%, #92400e 100%)',
+                marginRight: '0.75rem',
+                flexShrink: 0,
+                boxShadow: '0 4px 12px rgba(180, 83, 9, 0.25)'
+              }}>
+                <MdAccessTime size={32} style={{color: '#fcd34d'}} />
+              </div>
+              <h3>Next Contest</h3>
             </div>
             <div className="countdown-content">
               <div className="contest-info">
@@ -356,7 +390,26 @@ const Contests = () => {
 
         {/* Timeline */}
         <div className="contests-timeline">
-          <h3>📅 timeline</h3>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            marginBottom: '1.5rem'
+          }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+              boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)'
+            }}>
+              <MdSchedule size={28} style={{color: '#e9d5ff'}} />
+            </div>
+            <h3>Timeline</h3>
+          </div>
           
           {filteredContests.length === 0 ? (
             <div className="empty-state">
