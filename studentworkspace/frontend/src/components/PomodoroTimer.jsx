@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { MdPlayArrow, MdPause, MdRefresh, MdStop } from 'react-icons/md';
 import { AuthContext } from '../context/AuthContext';
-import { pomodoroService } from '../services/authService';
+import api from '../services/api';
 import '../styles/pomodoro.css';
 
 export const PomodoroTimer = ({ taskId, taskTitle, onComplete, onSessionSaved }) => {
@@ -27,7 +27,11 @@ export const PomodoroTimer = ({ taskId, taskTitle, onComplete, onSessionSaved })
     if (!user || !user.id) return;
     
     try {
-      await pomodoroService.recordWorkSession(user.id, workDuration, true);
+      await api.post('/api/pomodoro/sessions', {
+        userId: user.id,
+        workDuration: workDuration,
+        completed: true
+      });
       if (onSessionSaved) {
         onSessionSaved();
       }
@@ -185,3 +189,5 @@ export const PomodoroTimer = ({ taskId, taskTitle, onComplete, onSessionSaved })
     </div>
   );
 };
+
+export default PomodoroTimer;

@@ -214,10 +214,39 @@
 }
 
 .stat-icon {
-  font-size: 2.8rem;
-  min-width: 70px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  border-radius: 12px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.05));
+}
+
+/* Monochromatic stat card icon colors */
+.stat-card:nth-child(1) .stat-icon {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+  color: #60a5fa;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.stat-card:nth-child(2) .stat-icon {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  color: #6ee7b7;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+}
+
+.stat-card:nth-child(3) .stat-icon {
+  background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+  color: #fcd34d;
+  box-shadow: 0 4px 12px rgba(180, 83, 9, 0.25);
+}
+
+.stat-card:nth-child(4) .stat-icon {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: #e9d5ff;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
 }
 
 .stat-content {

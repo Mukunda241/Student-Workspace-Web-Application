@@ -2,6 +2,8 @@ import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
+import { MdToday, MdEmojiEvents, MdHourglassEmpty, MdTaskAlt, MdCheckCircle, MdAccessTime, MdFolder } from 'react-icons/md';
+import PomodoroTimer from '../components/PomodoroTimer';
 import api from '../services/api';
 import '../styles/dashboard.css';
 
@@ -97,7 +99,9 @@ export const Dashboard = () => {
             {/* Stats Row */}
             <section className="stats-row">
               <div className="stat-card">
-                <div className="stat-icon">📋</div>
+                <div className="stat-icon">
+                  <MdTaskAlt size={28} />
+                </div>
                 <div className="stat-content">
                   <h3>Total Tasks</h3>
                   <p className="stat-value">{dashboardData.userStats?.totalTasks || 0}</p>
@@ -106,7 +110,9 @@ export const Dashboard = () => {
               </div>
 
               <div className="stat-card">
-                <div className="stat-icon">✅</div>
+                <div className="stat-icon">
+                  <MdCheckCircle size={28} />
+                </div>
                 <div className="stat-content">
                   <h3>Tasks Completed</h3>
                   <p className="stat-value">{dashboardData.userStats?.completedTasks || 0}</p>
@@ -115,7 +121,9 @@ export const Dashboard = () => {
               </div>
 
               <div className="stat-card">
-                <div className="stat-icon">⏱️</div>
+                <div className="stat-icon">
+                  <MdAccessTime size={28} />
+                </div>
                 <div className="stat-content">
                   <h3>Study Hours</h3>
                   <p className="stat-value">{formatHours(dashboardData.userStats?.totalTimeSpent || 0)}h</p>
@@ -124,7 +132,9 @@ export const Dashboard = () => {
               </div>
 
               <div className="stat-card">
-                <div className="stat-icon">📁</div>
+                <div className="stat-icon">
+                  <MdFolder size={28} />
+                </div>
                 <div className="stat-content">
                   <h3>Ongoing Projects</h3>
                   <p className="stat-value">{dashboardData.userStats?.ongoingProjects || 0}</p>
@@ -138,7 +148,21 @@ export const Dashboard = () => {
               {/* Urgent Tasks Card */}
               <div className="dashboard-card large">
                 <div className="card-header">
-                  <h3>📅 Urgent Tasks</h3>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+                    marginRight: '0.75rem',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+                  }}>
+                    <MdToday size={32} style={{color: '#60a5fa'}} />
+                  </div>
+                  <h3>Urgent Tasks</h3>
                   <button onClick={() => navigate('/tasks')} className="btn-view">View All</button>
                 </div>
                 <div className="tasks-list">
@@ -169,7 +193,21 @@ export const Dashboard = () => {
               {/* Upcoming Contests Card */}
               <div className="dashboard-card">
                 <div className="card-header">
-                  <h3>🏆 Upcoming Contests</h3>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #047857 0%, #065f46 100%)',
+                    marginRight: '0.75rem',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)'
+                  }}>
+                    <MdEmojiEvents size={32} style={{color: '#6ee7b7'}} />
+                  </div>
+                  <h3>Upcoming Contests</h3>
                   <button onClick={() => navigate('/contests')} className="btn-view">View All</button>
                 </div>
                 <div className="contests-list">
@@ -240,6 +278,28 @@ export const Dashboard = () => {
                     🏆 Browse Contests
                   </button>
                 </div>
+              </div>
+
+              {/* Pomodoro Timer Card */}
+              <div className="dashboard-card">
+                <div className="card-header">
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #b45309 0%, #92400e 100%)',
+                    marginRight: '0.75rem',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 12px rgba(180, 83, 9, 0.25)'
+                  }}>
+                    <MdHourglassEmpty size={32} style={{color: '#fcd34d'}} />
+                  </div>
+                  <h3>Pomodoro Timer</h3>
+                </div>
+                <PomodoroTimer />
               </div>
             </section>
           </>
