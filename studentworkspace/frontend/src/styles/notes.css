@@ -118,18 +118,18 @@
 
 .sidebar-header {
   padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 2px solid #e5e7eb;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-shrink: 0;
+  background: white;
 }
 
 .sidebar-header h2 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.5rem;
+  font-weight: 700;
   color: #1f2937;
-  transition: all 0.3s ease;
 }
 
 .notes-sidebar.collapsed .sidebar-header h2 {

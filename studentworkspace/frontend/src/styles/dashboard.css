@@ -196,32 +196,51 @@
 .stat-card {
   background: white;
   border-radius: 14px;
-  padding: 1.8rem;
+  padding: 2rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 1.5rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s ease;
   border: 1px solid #e5e7eb;
-  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
 }
 
 .stat-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-  border-color: #bfdbfe;
-  background: white;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
 }
 
 .stat-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  min-width: 52px;
-  border-radius: 12px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.05));
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  font-size: 2rem;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1;
 }
 
 /* Monochromatic stat card icon colors */
