@@ -386,26 +386,32 @@ const Tasks = () => {
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.75rem',
+                gap: '1rem',
                 marginBottom: '0.5rem'
               }}>
                 <div style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: '56px',
-                  height: '56px',
-                  borderRadius: '14px',
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '16px',
                   background: 'linear-gradient(135deg, #047857 0%, #065f46 100%)',
-                  boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)'
+                  boxShadow: '0 6px 16px rgba(5, 150, 105, 0.3)'
                 }}>
-                  <MdPlaylistAddCheck size={32} style={{color: '#6ee7b7'}} />
+                  <MdPlaylistAddCheck size={36} style={{color: '#6ee7b7'}} />
                 </div>
-                <h2>Tasks</h2>
+                <h2 style={{fontSize: '2rem', fontWeight: '700', color: '#1f2937', margin: 0}}>Tasks</h2>
               </div>
-              <p>Organize, prioritize, and track your work with Pomodoro focus sessions</p>
+              <p style={{fontSize: '1rem', color: '#6b7280', marginTop: '0.5rem'}}>Organize, prioritize, and track your work with Pomodoro focus sessions</p>
             </div>
-            <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+            <button className="btn-primary" onClick={() => setShowForm(!showForm)} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '1rem',
+              fontWeight: '600'
+            }}>
               ➕ New Task
             </button>
           </div>

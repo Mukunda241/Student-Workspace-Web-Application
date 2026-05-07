@@ -331,9 +331,9 @@ const Contests = () => {
               }}>
                 <MdEmojiEvents size={40} style={{color: '#fef3c7'}} />
               </div>
-              <h1>Contest Center</h1>
+              <h1 style={{fontSize: '2rem', fontWeight: '700', color: '#1f2937', margin: 0}}>Contest Center</h1>
             </div>
-            <p>The Pulse of the Competitive Programmer's Life</p>
+            <p style={{fontSize: '1rem', color: '#6b7280', marginTop: '0.5rem'}}>The Pulse of the Competitive Programmer's Life</p>
           </div>
         </div>
 

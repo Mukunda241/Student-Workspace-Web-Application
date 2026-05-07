@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
 import { projectService } from '../services/authService';
-import { MdAssignment, MdRocketLaunch, MdSchedule, MdTrendingUp } from 'react-icons/md';
+import { MdAssignment, MdRocketLaunch, MdSchedule, MdTrendingUp, MdFolderOpen, MdAdd, MdCheckCircle, MdDone, MdPlayArrow, MdViewWeek } from 'react-icons/md';
 import '../styles/projects.css';
 
 export const Projects = () => {
@@ -381,14 +381,41 @@ export const Projects = () => {
         {/* Projects Header with Stats Overview */}
         <section className="projects-header">
           <div className="header-title">
-            <h2>📁 Projects Hub</h2>
-            <p>Organize your academic work into projects</p>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              marginBottom: '0.5rem'
+            }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '64px',
+                height: '64px',
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+                boxShadow: '0 6px 16px rgba(37, 99, 235, 0.3)'
+              }}>
+                <MdFolderOpen size={40} style={{color: '#60a5fa'}} />
+              </div>
+              <h2 style={{fontSize: '2rem', fontWeight: '700', color: '#1f2937', margin: 0}}>Projects Hub</h2>
+            </div>
+            <p style={{fontSize: '1rem', color: '#6b7280', marginTop: '0.5rem'}}>Organize your academic work into projects</p>
           </div>
           <button 
             onClick={() => setShowForm(!showForm)} 
             className="btn-primary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '1rem',
+              fontWeight: '600'
+            }}
           >
-            {showForm ? '✕ Cancel' : '➕ New Project'}
+            <MdAdd size={20} />
+            {showForm ? 'Cancel' : 'New Project'}
           </button>
         </section>
 
