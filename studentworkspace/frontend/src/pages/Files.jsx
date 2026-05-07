@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
 import { fileService } from '../services/authService';
+import { MdFolder, MdUploadFile } from 'react-icons/md';
 import '../styles/files.css';
 
 export const Files = () => {
@@ -113,7 +114,10 @@ export const Files = () => {
     <div className="files-container">
       <nav className="navbar">
         <div className="nav-content">
-          <h1>Student Workspace</h1>
+          <h1>
+            <MdFolder size={24} style={{display: 'inline-block', marginRight: '0.5rem'}} />
+            Student Workspace
+          </h1>
           <div className="nav-links">
             <a href="/dashboard">Dashboard</a>
             <a href="/projects">Projects</a>
@@ -128,12 +132,27 @@ export const Files = () => {
 
       <div className="files-content">
         <div className="files-header">
-          <h2>📚 My Study Files</h2>
+          <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '56px',
+              height: '56px',
+              borderRadius: '14px',
+              background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+            }}>
+              <MdFolder size={30} style={{color: '#60a5fa'}} />
+            </div>
+            <h2>My Study Files</h2>
+          </div>
           <button 
             onClick={() => setShowUploadForm(!showUploadForm)} 
             className="btn-primary"
           >
-            {showUploadForm ? 'Cancel' : '+ Upload File'}
+            <MdUploadFile size={18} style={{marginRight: '0.5rem'}} />
+            {showUploadForm ? 'Cancel' : 'Upload File'}
           </button>
         </div>
 
