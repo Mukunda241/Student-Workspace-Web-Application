@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
 import { API_BASE } from '../utils/constants';
+import { MdPlaylistAddCheck, MdSearch } from 'react-icons/md';
 import '../styles/tasks.css';
 
 const Tasks = () => {
@@ -382,7 +383,26 @@ const Tasks = () => {
         <div className="tasks-content">
           <div className="tasks-header">
             <div className="header-title">
-              <h2>⚡ Tasks</h2>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                marginBottom: '0.5rem'
+              }}>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #047857 0%, #065f46 100%)',
+                  boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)'
+                }}>
+                  <MdPlaylistAddCheck size={32} style={{color: '#6ee7b7'}} />
+                </div>
+                <h2>Tasks</h2>
+              </div>
               <p>Organize, prioritize, and track your work with Pomodoro focus sessions</p>
             </div>
             <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
