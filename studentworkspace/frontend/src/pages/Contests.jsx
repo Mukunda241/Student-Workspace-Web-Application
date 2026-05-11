@@ -92,16 +92,11 @@ export const Contests = () => {
 
   /* ── Load cached contests from localStorage on mount ── */
   useEffect(() => {
-    const cached = localStorage.getItem('contestData');
-    if (cached) {
-      try { setContests(JSON.parse(cached)); } catch (_) {}
-    }
-    // Auto-sync if never synced or last sync > 4 hours ago
-    const last = localStorage.getItem('contestLastSync');
-    const fourHours = 4 * 60 * 60 * 1000;
-    if (!last || Date.now() - new Date(last).getTime() > fourHours) {
-      fetchContests();
-    }
+    // Clear old cached data to force fresh fetch from backend with correct times
+    localStorage.removeItem('contestData');
+    localStorage.removeItem('contestLastSync');
+    // Always fetch fresh data from backend
+    fetchContests();
   }, []);
 
   /* ── Fetch from BACKEND API ── */
