@@ -110,4 +110,20 @@ public class StudyFileController {
         List<StudyFile> files = studyFileService.getAllFiles();
         return new ResponseEntity<>(files, HttpStatus.OK);
     }
+
+    @GetMapping("/download/{fileId}")
+    public ResponseEntity<byte[]> downloadFile(@PathVariable Long fileId) {
+        try {
+            StudyFile file = studyFileService.getFileById(fileId);
+            Path path = Paths.get(file.getFilePath());
+            byte[] data = Files.readAllBytes(path);
+            return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"" + file.getFileName() + "\"")
+                .header("Content-Type", file.getFileType() != null ? file.getFileType() : "application/octet-stream")
+                .body(data);
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
 }

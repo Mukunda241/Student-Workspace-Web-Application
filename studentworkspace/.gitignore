@@ -32,3 +32,9 @@ build/
 ### VS Code ###
 .vscode/
 /.apt_generated_tests/
+
+node_modules/
+frontend/node_modules/
+uploads/
+*.zip
+*.log

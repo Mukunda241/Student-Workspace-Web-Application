@@ -10,48 +10,46 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * Service to sync contests from external API (clist.by) to database.
- * Runs automatically every 24 hours (at 2 AM by default).
- * 
- * Security Note: API credentials are stored in application.properties (server-side only),
- * never exposed to frontend JavaScript.
- * 
- * Filtering: Only contests from allowed platforms are saved to database (database efficiency).
- */
 @Service
 public class ContestSyncService {
 
     private static final Logger logger = LoggerFactory.getLogger(ContestSyncService.class);
-    
-    /**
-     * Allowed platforms for filtering.
-     * These are normalized platform names (lowercase, without .com/.by etc).
-     * Easy to update - just add/remove platform names.
-     */
+
+    // Allowed platforms - must match normalized form of clist.by host field
     private static final Set<String> ALLOWED_PLATFORMS = Set.of(
-        "codeforces",
-        "leetcode", 
-        "codechef",
-        "hackerrank",
-        "atcoder",
-        "topcoder",
-        "kickstart",
-        "kaggle"
+        "codeforces.com",
+        "leetcode.com",
+        "codechef.com",
+        "hackerrank.com",
+        "atcoder.jp",
+        "kaggle.com",
+        "topcoder.com"
     );
+
+    // Display names for platforms stored in DB
+    private static final java.util.Map<String, String> PLATFORM_DISPLAY = new java.util.HashMap<>();
+    static {
+        PLATFORM_DISPLAY.put("codeforces.com",  "Codeforces");
+        PLATFORM_DISPLAY.put("leetcode.com",    "LeetCode");
+        PLATFORM_DISPLAY.put("codechef.com",    "CodeChef");
+        PLATFORM_DISPLAY.put("hackerrank.com",  "HackerRank");
+        PLATFORM_DISPLAY.put("atcoder.jp",      "AtCoder");
+        PLATFORM_DISPLAY.put("kaggle.com",      "Kaggle");
+        PLATFORM_DISPLAY.put("topcoder.com",    "TopCoder");
+    }
 
     @Autowired
     private ContestRepository contestRepository;
@@ -73,187 +71,172 @@ public class ContestSyncService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * Scheduled task to sync contests from external API.
-     * Runs every 24 hours at 2 AM (cron: "0 0 2 * * ?")
-     */
+    /** Scheduled auto-sync every day at 2 AM */
     @Scheduled(cron = "${contest.sync.cron:0 0 2 * * ?}")
     public void syncContests() {
-        if (!syncEnabled) {
-            logger.info("Contest sync is disabled");
-            return;
-        }
+        if (!syncEnabled) return;
+        logger.info("Starting scheduled contest sync…");
+        doSync();
+    }
 
-        logger.info("Starting contest sync from external API...");
+    /** Called by controller for manual sync */
+    public void syncContestsManually() {
+        logger.info("Manual contest sync triggered");
+        doSync();
+    }
+
+    /** Core sync logic */
+    private void doSync() {
         try {
-            // Fetch contests from external API
-            String jsonResponse = fetchFromExternalAPI();
-
-            if (jsonResponse == null || jsonResponse.isEmpty()) {
-                logger.warn("No data received from external API");
+            String json = fetchFromAPI();
+            if (json == null || json.isBlank()) {
+                logger.warn("Empty response from contest API");
                 return;
             }
-
-            // Parse JSON and save to database
-            parseAndSaveContests(jsonResponse);
-            logger.info("Contest sync completed successfully");
-
+            parseAndSave(json);
         } catch (Exception e) {
-            logger.error("Error during contest sync: {}", e.getMessage(), e);
+            logger.error("Contest sync failed: {}", e.getMessage(), e);
+            throw new RuntimeException("Sync failed: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Fetches contests from clist.by API v4 using query parameters.
-     * Returns raw JSON response.
+     * Fetch contests from clist.by API v4.
+     *
+     * FIX 1: Use exchange() with HttpEntity so Authorization header is sent.
+     *        getForEntity(url, class, entity) passes entity as a URI variable,
+     *        NOT as an HttpEntity — so auth headers were never sent → 403 Forbidden.
+     *
+     * FIX 2: clist.by v4 uses "Authorization: ApiKey username:key" header.
      */
-    private String fetchFromExternalAPI() {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+    private String fetchFromAPI() {
+        // Build URL — fetch upcoming contests from all allowed platforms
+        String resourceFilter = String.join(",", ALLOWED_PLATFORMS);
+        String url = apiUrl
+            + "?upcoming=true"
+            + "&order_by=start"
+            + "&limit=100"
+            + "&resource__in=" + resourceFilter;
 
-            // Make API call with query parameters (v4 API uses query params, not Basic Auth)
-            String url = apiUrl + "?username=" + apiUsername + "&api_key=" + apiKey + "&upcoming=true&order_by=start&limit=50";
-            logger.info("Fetching contests from: {}", url.replace(apiKey, "***")); // Log without exposing API key
+        // FIX: set Authorization header correctly
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "ApiKey " + apiUsername + ":" + apiKey);
+        headers.set("Accept", "application/json");
+        headers.set("User-Agent", "StudentWorkspace/1.0");
 
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class, entity);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            if (response.getStatusCode().is2xxSuccessful()) {
-                logger.info("Successfully fetched data from external API");
-                return response.getBody();
-            } else {
-                logger.error("API returned status code: {}", response.getStatusCode());
-                return null;
-            }
+        logger.info("Fetching contests from clist.by (user={})", apiUsername);
 
-        } catch (Exception e) {
-            logger.error("Error fetching from external API: {}", e.getMessage(), e);
+        // FIX: use exchange() — getForEntity() does NOT support passing HttpEntity
+        ResponseEntity<String> response = restTemplate.exchange(
+            url, HttpMethod.GET, entity, String.class
+        );
+
+        if (response.getStatusCode().is2xxSuccessful()) {
+            logger.info("Fetched contest data successfully ({} chars)", 
+                response.getBody() != null ? response.getBody().length() : 0);
+            return response.getBody();
+        } else {
+            logger.error("API returned {}", response.getStatusCode());
             return null;
         }
     }
 
     /**
-     * Parses JSON response and saves/updates contests in database.
-     * Uses upsert logic: if external_id exists, update; otherwise create.
+     * Parse clist.by JSON and upsert contests into DB.
+     *
+     * FIX 3: normalizePlatform was broken — "leetcode.com".replaceAll("\\.(com|...)$","")
+     *        produced "leetcodcom" not "leetcode". Now we keep the full host string
+     *        and compare against the full ALLOWED_PLATFORMS set directly.
+     *
+     * FIX 4: UTC times are converted to IST before storing so DB always holds IST wall-clock.
      */
-    private void parseAndSaveContests(String jsonResponse) {
-        try {
-            if (jsonResponse == null || jsonResponse.isEmpty()) {
-                logger.warn("Received empty API response");
-                return;
-            }
+    private void parseAndSave(String json) throws Exception {
+        JsonNode root = objectMapper.readTree(json);
+        JsonNode objects = root.get("objects");
 
-            logger.info("Raw API response length: {} chars", jsonResponse.length());
-            logger.info("Response preview: {}", jsonResponse.substring(0, Math.min(500, jsonResponse.length())));
+        if (objects == null || !objects.isArray()) {
+            logger.warn("No 'objects' array in API response");
+            return;
+        }
 
-            JsonNode rootNode = objectMapper.readTree(jsonResponse);
-            
-            // Log root node structure
-            java.util.List<String> fieldNames = new ArrayList<>();
-            rootNode.fieldNames().forEachRemaining(fieldNames::add);
-            logger.info("Root node fields: {}", fieldNames);
-            
-            // clist.by API v4 returns data in "objects" array, not "results"
-            JsonNode contestsArray = rootNode.get("objects");
+        int created = 0, updated = 0, skipped = 0;
 
-            if (contestsArray == null || !contestsArray.isArray()) {
-                logger.warn("No 'objects' array found in API response. Raw response: {}", jsonResponse.substring(0, Math.min(500, jsonResponse.length())));
-                return;
-            }
+        for (JsonNode node : objects) {
+            try {
+                String externalId   = node.path("id").asText();
+                String host         = node.path("host").asText().toLowerCase().trim();
+                String title        = node.path("event").asText();
+                String startTimeStr = node.path("start").asText();
+                String endTimeStr   = node.path("end").asText();
+                String url          = node.path("href").asText();
 
-            int savedCount = 0;
-            int updatedCount = 0;
-
-            for (JsonNode contestNode : contestsArray) {
-                try {
-                    // Map clist.by API fields to our Contest model
-                    // API fields: id, event, host, href, start, end, etc.
-                    String externalId = contestNode.get("id").asText();
-                    String hostName = contestNode.get("host").asText();  // e.g., "kaggle.com"
-                    String normalizedPlatform = normalizePlatform(hostName);  // e.g., "kaggle"
-                    String title = contestNode.get("event").asText();     // e.g., "Contest name"
-                    String startTimeStr = contestNode.get("start").asText(); // ISO 8601 format
-                    String url = contestNode.get("href").asText();        // Contest URL
-
-                    logger.debug("Processing contest - Host: {}, Normalized: {}, Title: {}", hostName, normalizedPlatform, title);
-
-                    // **LAYER 2: FILTERING LOGIC**
-                    // Only save contests from allowed platforms (database efficiency)
-                    if (!ALLOWED_PLATFORMS.contains(normalizedPlatform)) {
-                        logger.debug("Skipping contest from platform: {} (not in allowed list)", normalizedPlatform);
-                        continue; // Skip this contest, move to next
-                    }
-
-                    // Parse start time (ISO 8601 format)
-                    LocalDateTime startTime = LocalDateTime.parse(
-                        startTimeStr.replace("Z", ""),
-                        DateTimeFormatter.ISO_LOCAL_DATE_TIME
-                    );
-
-                    // Check if contest already exists (upsert logic)
-                    Optional<Contest> existingContest = contestRepository.findByExternalId(externalId);
-
-                    if (existingContest.isPresent()) {
-                        // Update existing contest
-                        Contest contest = existingContest.get();
-                        contest.setContestName(title);
-                        contest.setStartTime(startTime);
-                        contest.setUrl(url);
-                        contest.setPlatform(hostName);  // Store original hostname
-                        contestRepository.save(contest);
-                        updatedCount++;
-                        logger.debug("Updated contest: {} on {}", title, hostName);
-                    } else {
-                        // Create new contest
-                        Contest newContest = new Contest();
-                        newContest.setExternal_id(externalId);
-                        newContest.setPlatform(hostName);  // Store original hostname
-                        newContest.setContestName(title);
-                        newContest.setStartTime(startTime);
-                        newContest.setUrl(url);
-                        contestRepository.save(newContest);
-                        savedCount++;
-                        logger.debug("Saved new contest: {} on {}", title, hostName);
-                    }
-
-                } catch (Exception e) {
-                    logger.warn("Error parsing contest record: {}", e.getMessage());
-                    // Continue with next contest
+                // FIX: compare full host string against ALLOWED_PLATFORMS
+                if (!ALLOWED_PLATFORMS.contains(host)) {
+                    skipped++;
+                    continue;
                 }
+
+                // Display name (e.g. "codeforces.com" → "Codeforces")
+                String displayName = PLATFORM_DISPLAY.getOrDefault(host, host);
+
+                // FIX: convert UTC → IST correctly
+                LocalDateTime startIst = parseToIST(startTimeStr);
+                LocalDateTime endIst   = parseToIST(endTimeStr);
+
+                if (startIst == null) {
+                    logger.warn("Skipping contest with unparseable time: {}", startTimeStr);
+                    continue;
+                }
+
+                Optional<Contest> existing = contestRepository.findByExternalId(externalId);
+                if (existing.isPresent()) {
+                    Contest c = existing.get();
+                    c.setContestName(title);
+                    c.setStartTime(startIst);
+                    c.setEndTime(endIst);
+                    c.setUrl(url);
+                    c.setPlatform(displayName);
+                    contestRepository.save(c);
+                    updated++;
+                } else {
+                    Contest c = new Contest();
+                    c.setExternal_id(externalId);
+                    c.setPlatform(displayName);
+                    c.setContestName(title);
+                    c.setStartTime(startIst);
+                    c.setEndTime(endIst);
+                    c.setUrl(url);
+                    contestRepository.save(c);
+                    created++;
+                }
+            } catch (Exception e) {
+                logger.warn("Error processing contest node: {}", e.getMessage());
             }
-
-            logger.info("Sync summary - Created: {}, Updated: {}", savedCount, updatedCount);
-
-        } catch (Exception e) {
-            logger.error("Error parsing API response: {}", e.getMessage(), e);
         }
+        logger.info("Sync done — created:{}, updated:{}, skipped:{}", created, updated, skipped);
     }
 
     /**
-     * Manually trigger sync (useful for testing).
-     * Can be called via endpoint if needed.
+     * Parse an ISO-8601 UTC string (e.g. "2026-05-13T09:00:00Z") and convert to IST LocalDateTime.
+     * Result: stores "2026-05-13T14:30:00" in DB (14:30 IST wall-clock).
+     * ContestResponse then wraps this as "2026-05-13T14:30:00+05:30" for the frontend.
      */
-    public void syncContestsManually() {
-        logger.info("Manual contest sync triggered");
-        syncContests();
-    }
-
-    /**
-     * Normalize platform name from hostname to match ALLOWED_PLATFORMS list.
-     * Examples: "codeforces.com" -> "codeforces", "kaggle.com" -> "kaggle"
-     */
-    private String normalizePlatform(String host) {
-        if (host == null || host.isEmpty()) {
-            return "";
+    private LocalDateTime parseToIST(String str) {
+        if (str == null || str.isBlank() || str.equals("null")) return null;
+        try {
+            ZonedDateTime utc = ZonedDateTime.parse(str, DateTimeFormatter.ISO_DATE_TIME);
+            return utc.withZoneSameInstant(ZoneId.of("Asia/Kolkata")).toLocalDateTime();
+        } catch (Exception e1) {
+            try {
+                // Fallback: treat as-is if no TZ info
+                return LocalDateTime.parse(str.replaceAll("[Z+].*$", ""),
+                    DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            } catch (Exception e2) {
+                logger.warn("Cannot parse datetime '{}': {}", str, e2.getMessage());
+                return null;
+            }
         }
-        
-        // Remove common TLDs and get the main domain
-        String normalized = host.toLowerCase()
-            .replaceAll("\\.(com|by|io|net|org)$", "")
-            .replaceAll("\\.", "")
-            .trim();
-        
-        return normalized;
     }
 }

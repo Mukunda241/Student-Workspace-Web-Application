@@ -1,191 +1,93 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
-import { MdPlayArrow, MdPause, MdRefresh, MdStop } from 'react-icons/md';
-import { AuthContext } from '../context/AuthContext';
+import React, { useState, useEffect, useRef } from 'react';
+import { IcoTimer, IcoPlay, IcoPause, IcoRefresh, IcoStop } from '../utils/icons';
 import api from '../services/api';
 import '../styles/pomodoro.css';
 
-export const PomodoroTimer = ({ taskId, taskTitle, onComplete, onSessionSaved }) => {
-  const { user } = useContext(AuthContext);
-  const [workMinutes, setWorkMinutes] = useState(25);
-  const [breakMinutes, setBreakMinutes] = useState(5);
-  const [totalSessions, setTotalSessions] = useState(0);
-  const [isActive, setIsActive] = useState(false);
-  const [isWorkSession, setIsWorkSession] = useState(true);
-  const [timeRemaining, setTimeRemaining] = useState(25 * 60);
-  const intervalRef = useRef(null);
-  const audioRef = useRef(null);
+const CIRCUMFERENCE = 2 * Math.PI * 50; // r=50
 
-  // Format time display
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
+const PomodoroTimer = ({ taskTitle }) => {
+  const [workMins,  setWorkMins]  = useState(25);
+  const [breakMins, setBreakMins] = useState(5);
+  const [isWork,    setIsWork]    = useState(true);
+  const [isActive,  setIsActive]  = useState(false);
+  const [timeLeft,  setTimeLeft]  = useState(25 * 60);
+  const [sessions,  setSessions]  = useState(0);
+  const interval = useRef(null);
 
-  // Save work session to backend
-  const saveWorkSession = async (workDuration) => {
-    if (!user || !user.id) return;
-    
-    try {
-      await api.post('/api/pomodoro/sessions', {
-        userId: user.id,
-        workDuration: workDuration,
-        completed: true
-      });
-      if (onSessionSaved) {
-        onSessionSaved();
-      }
-    } catch (err) {
-      console.error('Failed to save Pomodoro session:', err);
-    }
-  };
+  const total    = isWork ? workMins * 60 : breakMins * 60;
+  const progress = (total - timeLeft) / total;
+  const dash     = CIRCUMFERENCE - progress * CIRCUMFERENCE;
+  const stroke   = isWork ? 'var(--brand-500)' : 'var(--green-500)';
+  const fmt = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
-  // Start/Pause timer
   useEffect(() => {
     if (isActive) {
-      intervalRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
+      interval.current = setInterval(() => {
+        setTimeLeft(prev => {
           if (prev <= 1) {
-            // Timer finished
-            playNotification();
-            
-            if (isWorkSession) {
-              // Switch to break - save the work session
-              saveWorkSession(workMinutes);
-              setIsWorkSession(false);
-              setTotalSessions((s) => s + 1);
-              setTimeRemaining(breakMinutes * 60);
-              
-              if (onComplete) {
-                onComplete(workMinutes);
-              }
-            } else {
-              // Switch back to work
-              setIsWorkSession(true);
-              setTimeRemaining(workMinutes * 60);
-            }
-            
-            return breakMinutes * 60 || workMinutes * 60;
+            clearInterval(interval.current);
+            if (isWork) setSessions(s => s + 1);
+            setIsWork(w => !w);
+            setIsActive(false);
+            return isWork ? breakMins * 60 : workMins * 60;
           }
           return prev - 1;
         });
       }, 1000);
     } else {
-      clearInterval(intervalRef.current);
+      clearInterval(interval.current);
     }
+    return () => clearInterval(interval.current);
+  }, [isActive, isWork, workMins, breakMins]);
 
-    return () => clearInterval(intervalRef.current);
-  }, [isActive, isWorkSession, workMinutes, breakMinutes, onComplete]);
-
-  const playNotification = () => {
-    // Create a simple beep sound
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    
-    oscillator.frequency.value = isWorkSession ? 800 : 600;
-    oscillator.type = 'sine';
-    
-    gain.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
-  };
-
-  const handleReset = () => {
-    setIsActive(false);
-    setIsWorkSession(true);
-    setTimeRemaining(workMinutes * 60);
-    setTotalSessions(0);
-  };
-
-  const handleStop = () => {
-    setIsActive(false);
-    setIsWorkSession(true);
-    setTimeRemaining(workMinutes * 60);
-  };
-
-  const progressPercentage = isWorkSession
-    ? ((workMinutes * 60 - timeRemaining) / (workMinutes * 60)) * 100
-    : ((breakMinutes * 60 - timeRemaining) / (breakMinutes * 60)) * 100;
+  const reset = () => { setIsActive(false); setTimeLeft(isWork ? workMins * 60 : breakMins * 60); };
+  const stop  = () => { setIsActive(false); setIsWork(true); setTimeLeft(workMins * 60); };
 
   return (
-    <div className="pomodoro-timer">
-      <div className={`timer-display ${isWorkSession ? 'work' : 'break'}`}>
-        <div className="timer-label">
-          {isWorkSession ? '⏱️ Focus Time' : '☕ Break Time'}
-        </div>
-        <div className="timer-value">{formatTime(timeRemaining)}</div>
-        <div className="sessions-count">Sessions: {totalSessions}</div>
-      </div>
-
-      <div className="timer-progress">
-        <div className="progress-bar" style={{ width: `${progressPercentage}%` }}></div>
-      </div>
-
-      <div className="timer-controls">
-        <button
-          className="control-btn play-btn"
-          onClick={() => setIsActive(!isActive)}
-          title={isActive ? 'Pause' : 'Start'}
-        >
-          {isActive ? <MdPause size={24} /> : <MdPlayArrow size={24} />}
-        </button>
-        <button
-          className="control-btn reset-btn"
-          onClick={handleReset}
-          title="Reset"
-        >
-          <MdRefresh size={24} />
-        </button>
-        <button
-          className="control-btn stop-btn"
-          onClick={handleStop}
-          title="Stop"
-        >
-          <MdStop size={24} />
-        </button>
-      </div>
-
-      {taskTitle && (
-        <div className="timer-task">
-          <strong>Task:</strong> {taskTitle}
-        </div>
-      )}
-
-      <div className="timer-settings">
-        <div className="setting">
-          <label>Work</label>
-          <input
-            type="number"
-            min="1"
-            max="60"
-            value={workMinutes}
-            onChange={(e) => {
-              setWorkMinutes(Number(e.target.value));
-              if (!isActive && isWorkSession) {
-                setTimeRemaining(Number(e.target.value) * 60);
-              }
-            }}
-            disabled={isActive}
-          />
-        </div>
-        <div className="setting">
-          <label>Break</label>
-          <input
-            type="number"
-            min="1"
-            max="30"
-            value={breakMinutes}
-            onChange={(e) => setBreakMinutes(Number(e.target.value))}
-            disabled={isActive}
-          />
+    <div className="pomo-widget">
+      <div className="pomo-top">
+        <h3><IcoTimer size={15} />{taskTitle ? taskTitle.slice(0, 18) : 'Pomodoro'}</h3>
+        <div className="pomo-type-switch">
+          <button className={isWork ? 'active' : ''} onClick={() => { setIsWork(true); stop(); }}>Work</button>
+          <button className={!isWork ? 'active' : ''} onClick={() => { setIsWork(false); stop(); }}>Break</button>
         </div>
       </div>
+
+      <div className="pomo-ring-area">
+        <div className="pomo-ring">
+          <svg width="120" height="120" viewBox="0 0 120 120" style={{transform:'rotate(-90deg)'}}>
+            <circle className="pomo-ring-bg" cx="60" cy="60" r="50" />
+            <circle className="pomo-ring-fill" cx="60" cy="60" r="50"
+              style={{ stroke, strokeDasharray: CIRCUMFERENCE, strokeDashoffset: dash }} />
+          </svg>
+          <div className="pomo-time-center">{fmt(timeLeft)}</div>
+        </div>
+        <div className="pomo-status-lbl">{isWork ? '🎯 Focus' : '☕ Break'} · Session {sessions + 1}</div>
+      </div>
+
+      <div className="pomo-controls">
+        {!isActive
+          ? <button className="btn btn-primary btn-sm" onClick={() => setIsActive(true)}><IcoPlay size={13} /> Start</button>
+          : <button className="btn btn-secondary btn-sm" onClick={() => setIsActive(false)}><IcoPause size={13} /> Pause</button>
+        }
+        <button className="btn btn-secondary btn-sm" onClick={reset}><IcoRefresh size={13} /> Reset</button>
+        <button className="btn btn-ghost btn-sm" onClick={stop}><IcoStop size={13} /> Stop</button>
+      </div>
+
+      <div className="pomo-settings">
+        <div className="pomo-setting">
+          <label>Work (min)</label>
+          <input type="number" min="1" max="90" value={workMins}
+            onChange={e => { setWorkMins(+e.target.value); if (!isActive && isWork) setTimeLeft(+e.target.value*60); }} />
+        </div>
+        <div className="pomo-setting">
+          <label>Break (min)</label>
+          <input type="number" min="1" max="30" value={breakMins}
+            onChange={e => { setBreakMins(+e.target.value); if (!isActive && !isWork) setTimeLeft(+e.target.value*60); }} />
+        </div>
+      </div>
+
+      {sessions > 0 && <div className="pomo-done-count">✅ {sessions} session{sessions>1?'s':''} completed</div>}
     </div>
   );
 };

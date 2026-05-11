@@ -1,128 +1,73 @@
 import React, { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { IcoGraduation, IcoDashboard, IcoCheckSquare, IcoFileText, IcoTrophy } from '../utils/icons';
 import '../styles/auth.css';
 
 export const Login = () => {
   const navigate = useNavigate();
-  const { login, error } = useContext(AuthContext);
+  const { login, error: ctxErr } = useContext(AuthContext);
+  const [form, setForm]     = useState({ email:'', password:'' });
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  const [formError, setFormError] = useState('');
+  const [err, setErr]       = useState('');
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setFormError('');
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setFormError('');
-
-    if (!formData.email || !formData.password) {
-      setFormError('Email and password are required');
-      return;
-    }
-
+  const submit = async (e) => {
+    e.preventDefault(); setErr('');
+    if (!form.email || !form.password) { setErr('All fields are required'); return; }
     try {
       setLoading(true);
-      await login(formData);
+      await login(form);
       navigate('/dashboard');
-    } catch (err) {
-      setFormError(err.response?.data?.message || 'Login failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) {
+      setErr(e.response?.data?.message || 'Login failed. Check your credentials.');
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-content">
-        {/* Left Side - Branding */}
-        <div className="auth-left">
-          <div className="auth-branding">
-            <div className="auth-logo">🎓</div>
-            <h1 className="auth-title">Student Workspace</h1>
-            <p className="auth-subtitle">Manage your projects, tasks, notes, and contests all in one place.</p>
-          </div>
-
+    <div className="auth-page">
+      <div className="auth-left">
+        <div className="auth-inner">
+          <div className="auth-logo"><IcoGraduation size={28}/></div>
+          <h1 className="auth-h">Student Workspace</h1>
+          <p className="auth-sub">Your all-in-one academic productivity platform — manage projects, tasks, notes and contests.</p>
           <div className="auth-features">
-            <div className="auth-feature">
-              <span className="auth-feature-icon">📊</span>
-              <span>Track your academic progress with detailed analytics</span>
-            </div>
-            <div className="auth-feature">
-              <span className="auth-feature-icon">📁</span>
-              <span>Organize projects and collaborate seamlessly</span>
-            </div>
-            <div className="auth-feature">
-              <span className="auth-feature-icon">✅</span>
-              <span>Manage tasks with priority and deadline tracking</span>
-            </div>
-            <div className="auth-feature">
-              <span className="auth-feature-icon">🏆</span>
-              <span>Compete in coding contests and win prizes</span>
-            </div>
+            {[
+              { Icon: IcoDashboard,   text: 'Real-time academic dashboard' },
+              { Icon: IcoCheckSquare, text: 'Kanban tasks with Pomodoro timer' },
+              { Icon: IcoFileText,    text: 'Markdown notes with auto-save' },
+              { Icon: IcoTrophy,      text: 'Live coding contest tracker' },
+            ].map(({ Icon, text }, i) => (
+              <div key={i} className="auth-feat">
+                <div className="auth-feat-icon"><Icon size={17}/></div>
+                <span>{text}</span>
+              </div>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* Right Side - Login Form */}
-        <div className="auth-card">
-          <h1>Welcome Back</h1>
-          <h2>Sign in to your account</h2>
-
-          {(formError || error) && (
-            <div className="error-message">{formError || error}</div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label>Email Address</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="you@example.com"
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Password</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Your password"
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading} 
-              className="btn-primary"
-              style={{ width: '100%' }}
-            >
-              {loading ? '✨ Signing in...' : 'Sign In'}
-            </button>
-          </form>
-
-          <p className="auth-link">
-            Don't have an account? <a href="/register">Create one now</a>
-          </p>
-        </div>
+      <div className="auth-right">
+        <h1>Welcome back</h1>
+        <h2>Sign in to your account</h2>
+        {(err||ctxErr) && <div className="form-error">{err||ctxErr}</div>}
+        <form className="auth-form" onSubmit={submit}>
+          <div className="form-group">
+            <label>Email address</label>
+            <input type="email" value={form.email} placeholder="you@example.com" disabled={loading}
+              onChange={e => setForm(p=>({...p,email:e.target.value}))} required/>
+          </div>
+          <div className="form-group">
+            <label>Password</label>
+            <input type="password" value={form.password} placeholder="Your password" disabled={loading}
+              onChange={e => setForm(p=>({...p,password:e.target.value}))} required/>
+          </div>
+          <button type="submit" disabled={loading} className="btn btn-primary btn-auth">
+            {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
+        <p className="auth-link">No account? <a href="/register">Create one free</a></p>
       </div>
     </div>
   );
 };
-
 export default Login;

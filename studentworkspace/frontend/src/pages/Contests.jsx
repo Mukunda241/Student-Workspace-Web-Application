@@ -1,476 +1,374 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '../components/MainLayout';
-import { MdAccessTime, MdEmojiEvents, MdSchedule, MdBell, MdNotifications } from 'react-icons/md';
-import { API_BASE } from '../utils/constants';
+import {
+  IcoTrophy, IcoClock, IcoCalendar, IcoBell,
+  IcoExternalLink, IcoSearch, IcoX, IcoRefresh, IcoCheck, IcoAlert
+} from '../utils/icons';
 import '../styles/contests.css';
 
-const Contests = () => {
-  const navigate = useNavigate();
-  const { user, logout } = useAuth();
-  
-  // State Management
-  const [contests, setContests] = useState([]);
-  const [filteredContests, setFilteredContests] = useState([]);
-  const [nextContest, setNextContest] = useState(null);
-  const [platforms, setPlatforms] = useState([]);
-  const [selectedPlatforms, setSelectedPlatforms] = useState(new Set());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState('');
+/* ─────────────────────────────────────────────────────────────
+   Contest page now fetches from the backend API.
+   The backend stores all contests with IST-corrected times.
+───────────────────────────────────────────────────────────── */
 
-  // Countdown timer state
-  const [countdownTime, setCountdownTime] = useState(null);
-  const countdownIntervalRef = useRef(null);
+const PLATFORMS = ['All','Codeforces','LeetCode','CodeChef','AtCoder','HackerRank','Kaggle'];
 
-  // Reminders state
-  const [userReminders, setUserReminders] = useState(new Set());
+/* ── Date helpers ─────────────────────────────────────────── */
 
-  // Fetch contests
+// Parse ISO-8601 date string to JS Date (handles Z suffix = UTC)
+const parseDate = (d) => {
+  if (!d) return null;
+  try {
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? null : dt;
+  } catch { return null; }
+};
+
+// Format as IST locale string
+const fmtIST = (d) => {
+  const dt = parseDate(d);
+  if (!dt) return '';
+  return dt.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  }) + ' IST';
+};
+
+// Human-readable countdown
+const getCountdown = (d) => {
+  const dt = parseDate(d);
+  if (!dt) return { label: 'TBD', cls: '' };
+  const diff = dt.getTime() - Date.now();
+  if (diff <= 0) return { label: 'Live Now', cls: 'live' };
+  const totalMins = Math.floor(diff / 60000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (h < 1)  return { label: `${m}m`,       cls: 'urgent' };
+  if (h < 24) return { label: `${h}h ${m}m`, cls: h < 3 ? 'soon' : '' };
+  const days = Math.floor(h / 24);
+  return { label: `${days}d ${h % 24}h`, cls: '' };
+};
+
+// Format duration in minutes to "Xh Ym"
+const fmtDuration = (secs) => {
+  if (!secs) return '';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
+};
+
+// Is a contest in the past?
+const isPast = (startISO, endISO) => {
+  const end   = parseDate(endISO);
+  const start = parseDate(startISO);
+  if (end && !isNaN(end.getTime()))   return end.getTime()   < Date.now();
+  if (start && !isNaN(start.getTime())) return start.getTime() < Date.now() - 3 * 3600000;
+  return false;
+};
+
+// CSS class for platform badge
+const platClass = (p) => {
+  if (!p) return 'plat-default';
+  const key = p.toLowerCase().replace(/\s/g, '');
+  const map = {
+    codeforces:'plat-codeforces', leetcode:'plat-leetcode',
+    codechef:'plat-codechef',     atcoder:'plat-atcoder',
+    hackerrank:'plat-hackerrank', kaggle:'plat-kaggle',
+  };
+  return map[key] || 'plat-default';
+};
+
+/* ─────────────────────────────────────────────────────────── */
+
+export const Contests = () => {
+  const [contests,  setContests]  = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState('');
+  const [platform,  setPlatform]  = useState('All');
+  const [search,    setSearch]    = useState('');
+  const [reminded,  setReminded]  = useState(new Set());
+  const [lastSync,  setLastSync]  = useState(() => localStorage.getItem('contestLastSync') || '');
+
+  /* ── Load cached contests from localStorage on mount ── */
   useEffect(() => {
-    fetchAllData();
+    const cached = localStorage.getItem('contestData');
+    if (cached) {
+      try { setContests(JSON.parse(cached)); } catch (_) {}
+    }
+    // Auto-sync if never synced or last sync > 4 hours ago
+    const last = localStorage.getItem('contestLastSync');
+    const fourHours = 4 * 60 * 60 * 1000;
+    if (!last || Date.now() - new Date(last).getTime() > fourHours) {
+      fetchContests();
+    }
   }, []);
 
-  const fetchAllData = async () => {
+  /* ── Fetch from BACKEND API ── */
+  const fetchContests = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
     try {
-      setLoading(true);
-      await Promise.all([
-        fetchContests(),
-        fetchPlatforms(),
-        fetchUserReminders(),
-        fetchNextContest()
-      ]);
-      setError(null);
+      // Fetch from backend which has IST-corrected times
+      const res = await fetch('http://localhost:8082/api/contests/upcoming', {
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Backend returned ${res.status}`);
+      }
+
+      const data = await res.json();
+      processAndStore(data);
     } catch (err) {
-      setError('Failed to load contest data');
-      console.error(err);
+      console.error('Contest fetch error:', err);
+      setError(`Could not load contests from backend: ${err.message}. Showing cached data if available.`);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const processAndStore = (contests) => {
+    const now = new Date().toISOString();
+    const mapped = contests
+      .map(c => ({
+        id:          c.id,
+        name:        c.contestName || 'Unknown Contest',
+        platform:    c.platform || 'Unknown',
+        startTime:   c.startTime,   // Already IST from backend
+        endTime:     c.endTime,      // Already IST from backend
+        duration:    c.endTime && c.startTime ? Math.floor((new Date(c.endTime) - new Date(c.startTime)) / 1000) : (c.duration || 0),
+        url:         c.url || '',
+      }))
+      .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+    setContests(mapped);
+    localStorage.setItem('contestData', JSON.stringify(mapped));
+    localStorage.setItem('contestLastSync', now);
+    setLastSync(now);
+    setError('');
   };
 
-  const fetchContests = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/contests`);
-
-      if (!response.ok) throw new Error('Failed to fetch contests');
-      const data = await response.json();
-      setContests(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Error fetching contests:', err);
-    }
-  };
-
-  const fetchPlatforms = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/contests/platforms`);
-
-      if (!response.ok) throw new Error('Failed to fetch platforms');
-      const data = await response.json();
-      setPlatforms(Array.isArray(data) ? data : []);
-      
-      // Initially select all platforms
-      setSelectedPlatforms(new Set(data));
-    } catch (err) {
-      console.error('Error fetching platforms:', err);
-    }
-  };
-
-  const fetchNextContest = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/contests/next`);
-
-      if (response.ok) {
-        const data = await response.json();
-        setNextContest(data);
-      }
-    } catch (err) {
-      console.error('Error fetching next contest:', err);
-    }
-  };
-
-  const fetchUserReminders = async () => {
-    if (!user) return;
-    
-    try {
-      const response = await fetch(`${API_BASE}/api/contests/reminders/${user.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) throw new Error('Failed to fetch reminders');
-      const data = await response.json();
-      const reminderIds = new Set(data.map(r => r.id));
-      setUserReminders(reminderIds);
-    } catch (err) {
-      console.error('Error fetching reminders:', err);
-    }
-  };
-
-  // Countdown timer effect
-  useEffect(() => {
-    if (nextContest && nextContest.startTime) {
-      const calculateCountdown = () => {
-        const now = new Date();
-        const startTime = new Date(nextContest.startTime);
-        const timeDiff = startTime - now;
-
-        if (timeDiff <= 0) {
-          setCountdownTime('Contest has started!');
-          setNextContest(null);
-          return;
-        }
-
-        const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-        const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
-
-        setCountdownTime(`${hours}h ${minutes}m ${seconds}s`);
-      };
-
-      calculateCountdown();
-      countdownIntervalRef.current = setInterval(calculateCountdown, 1000);
-
-      return () => {
-        if (countdownIntervalRef.current) {
-          clearInterval(countdownIntervalRef.current);
-        }
-      };
-    }
-  }, [nextContest]);
-
-  // Filter contests based on selected platforms
-  useEffect(() => {
-    const filtered = contests.filter(contest => 
-      selectedPlatforms.has(contest.platform)
-    );
-    setFilteredContests(filtered);
-  }, [contests, selectedPlatforms]);
-
-  // Handle platform checkbox change
-  const handlePlatformToggle = (platform) => {
-    const newSelected = new Set(selectedPlatforms);
-    if (newSelected.has(platform)) {
-      newSelected.delete(platform);
-    } else {
-      newSelected.add(platform);
-    }
-    setSelectedPlatforms(newSelected);
-  };
-
-  // Toggle reminder
-  const handleToggleReminder = async (contestId) => {
-    if (!user) {
-      setError('Please log in to set reminders');
-      return;
-    }
-
-    try {
-      const isReminded = userReminders.has(contestId);
-
-      if (isReminded) {
-        // Remove reminder
-        const response = await fetch(`${API_BASE}/api/contests/${contestId}/remind`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-
-        if (!response.ok) throw new Error('Failed to remove reminder');
-
-        const newReminders = new Set(userReminders);
-        newReminders.delete(contestId);
-        setUserReminders(newReminders);
-        setSuccessMessage('Reminder removed!');
-      } else {
-        // Set reminder
-        const response = await fetch(`${API_BASE}/api/contests/${contestId}/remind/${user.id}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-
-        if (!response.ok) throw new Error('Failed to set reminder');
-
-        const newReminders = new Set(userReminders);
-        newReminders.add(contestId);
-        setUserReminders(newReminders);
-        setSuccessMessage('Reminder set for 1 hour before contest!');
-      }
-
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (err) {
-      setError('Failed to update reminder');
-      console.error(err);
-      setTimeout(() => setError(''), 3000);
-    }
-  };
-
-  // Format date and time
-  const formatDateTime = (dateTimeString) => {
-    const date = new Date(dateTimeString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
+  const toggleRemind = (id) =>
+    setReminded(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
     });
-  };
 
-  // Get days until contest
-  const getDaysUntilContest = (dateTimeString) => {
-    const now = new Date();
-    const contestDate = new Date(dateTimeString);
-    const timeDiff = contestDate - now;
-    const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-    
-    if (daysRemaining < 0) return 'Past';
-    if (daysRemaining === 0) return 'Today';
-    if (daysRemaining === 1) return 'Tomorrow';
-    return `${daysRemaining}d`;
-  };
+  /* ── Filter ── */
+  const filtered = contests.filter(c => {
+    const mp = platform === 'All' ||
+      (c.platform || '').toLowerCase().replace(/\s/g,'') === platform.toLowerCase().replace(/\s/g,'');
+    const ms = !search.trim() ||
+      (c.name || '').toLowerCase().includes(search.toLowerCase());
+    return mp && ms;
+  });
 
-  // Get platform logo
-  const getPlatformLogo = (platform) => {
-    const logos = {
-      'LeetCode': '🔤',
-      'Codeforces': '⚽',
-      'HackerRank': '🎯',
-      'CodeChef': '👨‍🍳',
-      'AtCoder': '🎌',
-      'TopCoder': '🏆'
-    };
-    return logos[platform] || '📋';
-  };
+  const upcoming = filtered.filter(c => !isPast(c.startTime, c.endTime));
+  const past     = filtered.filter(c =>  isPast(c.startTime, c.endTime));
+  const next     = upcoming[0];
+  const { label: nextLabel } = next ? getCountdown(next.startTime) : { label: '—' };
 
-  if (loading) {
+  /* ── Cards ── */
+  const UpcomingCard = ({ c }) => {
+    const { label, cls } = getCountdown(c.startTime);
+    const isLive = cls === 'live';
     return (
-      <div className="contests-container">
-        <nav className="navbar">
-          <div className="nav-content">
-            <h1 className="app-title">StudentWorkspace</h1>
-            <div className="nav-links">
-              <a href="/dashboard" className="nav-link">Dashboard</a>
-              <a href="/projects" className="nav-link">Projects</a>
-              <a href="/tasks" className="nav-link">Tasks</a>
-              <a href="/notes" className="nav-link">Notes</a>
-              <a href="/files" className="nav-link">Files</a>
-              <a href="/contests" className="nav-link active">Contests</a>
-            </div>
-            <div className="nav-right">
-              <span className="user-info">{user?.email}</span>
-              <button className="btn-logout" onClick={logout}>Logout</button>
-            </div>
-          </div>
-        </nav>
-        <div className="loading">Loading contests...</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="contests-container">
-      {/* Navigation Bar */}
-      <nav className="navbar">
-        <div className="nav-content">
-          <h1 className="app-title">StudentWorkspace</h1>
-          <div className="nav-links">
-            <a href="/dashboard" className="nav-link">Dashboard</a>
-            <a href="/projects" className="nav-link">Projects</a>
-            <a href="/tasks" className="nav-link">Tasks</a>
-            <a href="/notes" className="nav-link">Notes</a>
-            <a href="/files" className="nav-link">Files</a>
-            <a href="/contests" className="nav-link active">Contests</a>
-          </div>
-          <div className="nav-right">
-            <span className="user-info">{user?.email}</span>
-            <button className="btn-logout" onClick={logout}>Logout</button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="contests-content">
-        {/* Messages */}
-        {error && (
-          <div className="error-message">
-            <span>{error}</span>
-            <button onClick={() => setError('')}>×</button>
-          </div>
-        )}
-        {successMessage && (
-          <div className="success-message">
-            <span>{successMessage}</span>
-          </div>
-        )}
-
-        {/* Header Section */}
-        <div className="contests-header">
-          <div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              marginBottom: '0.5rem'
-            }}>
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '64px',
-                height: '64px',
-                borderRadius: '16px',
-                background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
-                boxShadow: '0 6px 16px rgba(217, 119, 6, 0.3)'
-              }}>
-                <MdEmojiEvents size={40} style={{color: '#fef3c7'}} />
-              </div>
-              <h1 style={{fontSize: '2rem', fontWeight: '700', color: '#1f2937', margin: 0}}>Contest Center</h1>
-            </div>
-            <p style={{fontSize: '1rem', color: '#6b7280', marginTop: '0.5rem'}}>The Pulse of the Competitive Programmer's Life</p>
-          </div>
+      <div className={`contest-card${isLive ? ' live-now' : ''}`}>
+        <div className="contest-card-top">
+          <div className="contest-card-name">{c.name}</div>
+          <span className={`platform-badge ${platClass(c.platform)}`}>
+            {c.platform}
+          </span>
         </div>
 
-        {/* Next Contest Countdown */}
-        {nextContest && (
-          <div className="countdown-card">
-            <div className="countdown-header">
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '56px',
-                height: '56px',
-                borderRadius: '14px',
-                background: 'linear-gradient(135deg, #b45309 0%, #92400e 100%)',
-                marginRight: '0.75rem',
-                flexShrink: 0,
-                boxShadow: '0 4px 12px rgba(180, 83, 9, 0.25)'
-              }}>
-                <MdAccessTime size={32} style={{color: '#fcd34d'}} />
-              </div>
-              <h3>Next Contest</h3>
-            </div>
-            <div className="countdown-content">
-              <div className="contest-info">
-                <div className="platform-badge">{getPlatformLogo(nextContest.platform)} {nextContest.platform}</div>
-                <h4>{nextContest.contestName}</h4>
-                <p className="contest-time">{formatDateTime(nextContest.startTime)}</p>
-              </div>
-              <div className="countdown-timer">
-                <span className="timer-value">{countdownTime}</span>
-                <p className="timer-label">Time Remaining</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Filters Section */}
-        <div className="filters-section">
-          <h3>Platform Filters</h3>
-          <div className="filter-checkboxes">
-            {platforms.map(platform => (
-              <label key={platform} className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={selectedPlatforms.has(platform)}
-                  onChange={() => handlePlatformToggle(platform)}
-                />
-                <span className="checkbox-text">{getPlatformLogo(platform)} {platform}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Timeline */}
-        <div className="contests-timeline">
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            marginBottom: '1.5rem'
-          }}>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-              boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)'
-            }}>
-              <MdSchedule size={28} style={{color: '#e9d5ff'}} />
-            </div>
-            <h3>Timeline</h3>
-          </div>
-          
-          {filteredContests.length === 0 ? (
-            <div className="empty-state">
-              <p>No upcoming contests found in the selected platforms.</p>
-            </div>
+        <div className="contest-time-block">
+          {isLive ? (
+            <div className="live-indicator"><IcoClock size={13} /> Live Right Now!</div>
           ) : (
-            <div className="timeline-container">
-              {filteredContests.map((contest, index) => (
-                <div key={contest.id} className="timeline-item">
-                  <div className="timeline-marker"></div>
-                  <div className="contest-card">
-                    <div className="card-header">
-                      <div className="card-title-section">
-                        <span className="platform-logo">{getPlatformLogo(contest.platform)}</span>
-                        <h4 className="contest-title">{contest.contestName}</h4>
-                      </div>
-                      <span className="days-badge">{getDaysUntilContest(contest.startTime)}</span>
-                    </div>
-
-                    <div className="card-body">
-                      <div className="info-row">
-                        <span className="info-label">Platform:</span>
-                        <span className="info-value">{contest.platform}</span>
-                      </div>
-                      <div className="info-row">
-                        <span className="info-label">Starts:</span>
-                        <span className="info-value">{formatDateTime(contest.startTime)}</span>
-                      </div>
-                      {contest.endTime && (
-                        <div className="info-row">
-                          <span className="info-label">Ends:</span>
-                          <span className="info-value">{formatDateTime(contest.endTime)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="card-actions">
-                      <a 
-                        href={contest.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="btn-register"
-                      >
-                        Register →
-                      </a>
-                      <button 
-                        className={`btn-reminder ${userReminders.has(contest.id) ? 'reminded' : ''}`}
-                        onClick={() => handleToggleReminder(contest.id)}
-                        title={userReminders.has(contest.id) ? 'Remove reminder' : 'Remind me 1h before'}
-                      >
-                        {userReminders.has(contest.id) ? '🔔 Reminded' : '🔕 Remind Me'}
-                      </button>
-                    </div>
-                  </div>
+            <>
+              <div className="contest-time-row">
+                <IcoClock size={13} />
+                Starts in:&nbsp;
+                <strong style={{ color: cls === 'urgent' || cls === 'soon' ? 'var(--red-600)' : 'var(--brand-600)' }}>
+                  {label}
+                </strong>
+              </div>
+              {c.startTime && (
+                <div className="contest-time-row">
+                  <IcoCalendar size={13} />
+                  {/* startTime is UTC from clist.by — fmtIST converts correctly */}
+                  {fmtIST(c.startTime)}
                 </div>
-              ))}
+              )}
+            </>
+          )}
+          {c.duration > 0 && (
+            <div className="contest-dur">
+              <IcoClock size={12} /> Duration: {fmtDuration(c.duration)}
             </div>
           )}
         </div>
+
+        <div className="contest-footer">
+          <button
+            className={`btn btn-sm ${reminded.has(c.id) ? 'btn-remind reminded' : 'btn-secondary'}`}
+            onClick={() => toggleRemind(c.id)}
+          >
+            {reminded.has(c.id)
+              ? <><IcoCheck size={12} /> Reminded</>
+              : <><IcoBell size={12} /> Remind me</>}
+          </button>
+          {c.url && (
+            <a href={c.url} target="_blank" rel="noopener noreferrer"
+              className="btn btn-sm btn-primary">
+              <IcoExternalLink size={12} /> Register
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const PastCard = ({ c }) => (
+    <div className="contest-card contest-card-past">
+      <div className="contest-card-top">
+        <div className="contest-card-name">{c.name}</div>
+        <span className={`platform-badge ${platClass(c.platform)}`}>{c.platform}</span>
+      </div>
+      <div className="contest-time-block">
+        {c.startTime && (
+          <div className="contest-time-row">
+            <IcoCalendar size={13} />{fmtIST(c.startTime)}
+          </div>
+        )}
+        {c.duration > 0 && (
+          <div className="contest-dur"><IcoClock size={12} /> {fmtDuration(c.duration)}</div>
+        )}
+      </div>
+      <div className="contest-footer">
+        <span className="badge badge-done" style={{ fontSize: '.72rem', padding: '3px 10px' }}>
+          <IcoCheck size={11} /> Completed
+        </span>
+        {c.url && (
+          <a href={c.url} target="_blank" rel="noopener noreferrer"
+            className="btn btn-sm btn-secondary" style={{ fontSize: '.73rem' }}>
+            <IcoExternalLink size={12} /> View
+          </a>
+        )}
       </div>
     </div>
+  );
+
+  return (
+    <MainLayout pageTitle="Contests">
+      <div className="contests-wrap">
+
+        {/* ── Next contest banner ── */}
+        {next && (
+          <div className="contests-banner">
+            <div className="contests-banner-left">
+              <h3>Next: {next.name}</h3>
+              <p>{next.platform} · {fmtIST(next.startTime)}</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div className="contests-countdown">{nextLabel}</div>
+              <div className="contests-countdown-lbl">until start</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Error ── */}
+        {error && (
+          <div className="error-msg" style={{ marginBottom: '1rem', alignItems: 'flex-start' }}>
+            <IcoAlert size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* ── Toolbar ── */}
+        <div style={{ display: 'flex', gap: '.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 160, maxWidth: 280 }}>
+            <IcoSearch size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-3)', pointerEvents: 'none' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search contests…" style={{ paddingLeft: 30 }} />
+          </div>
+
+          {lastSync && (
+            <span style={{ fontSize: '.72rem', color: 'var(--txt-3)', whiteSpace: 'nowrap' }}>
+              Synced {new Date(lastSync).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+
+          <button className="btn btn-primary btn-sm" onClick={fetchContests} disabled={loading}
+            style={{ marginLeft: 'auto' }}>
+            <IcoRefresh size={13} /> {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
+
+        {/* ── Platform filter chips ── */}
+        <div className="platform-filters">
+          {PLATFORMS.map(p => (
+            <button key={p}
+              className={`chip-btn${platform === p ? ' active' : ''}`}
+              onClick={() => setPlatform(p)}
+              style={{ fontSize: '.75rem', padding: '4px 13px' }}>
+              {p}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Content ── */}
+        {loading ? (
+          <div className="loading-wrap"><div className="spinner" /> Loading contests from clist.by…</div>
+        ) : filtered.length === 0 && contests.length === 0 ? (
+          <div className="contest-empty">
+            <IcoTrophy size={52} />
+            <h3>No contests found</h3>
+            <p style={{ marginBottom: '1.25rem' }}>
+              Click Refresh to load upcoming contests from Codeforces, LeetCode, CodeChef and more.
+            </p>
+            <button className="btn btn-primary" onClick={fetchContests} disabled={loading}>
+              <IcoRefresh size={14} /> {loading ? 'Loading…' : 'Load Contests'}
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="contest-empty">
+            <IcoSearch size={40} />
+            <h3>No matching contests</h3>
+            <p>Try selecting "All" platforms or clearing the search.</p>
+          </div>
+        ) : (
+          <>
+            {/* Upcoming */}
+            {upcoming.length > 0 && (
+              <>
+                <div className="section-label">
+                  <IcoTrophy size={14} /> Upcoming ({upcoming.length})
+                </div>
+                <div className="contests-grid">
+                  {upcoming.map(c => <UpcomingCard key={c.id} c={c} />)}
+                </div>
+              </>
+            )}
+
+            {/* Past */}
+            {past.length > 0 && (
+              <>
+                <div className="section-label" style={{ marginTop: '1.5rem' }}>
+                  <IcoClock size={14} /> Past Contests ({past.length})
+                </div>
+                <div className="contests-grid">
+                  {past.slice(0, 20).map(c => <PastCard key={c.id} c={c} />)}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </MainLayout>
   );
 };
 

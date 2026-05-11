@@ -1,6 +1,9 @@
 package com.studentworkspace.dto;
 
 import java.util.List;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Dashboard Summary Response DTO
@@ -62,15 +65,20 @@ public class DashboardResponse {
     }
 
     public static class UpcomingContestDTO {
+        private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+        private static final DateTimeFormatter FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssxxx").withZone(IST);
+
         private Long id;
         private String platform;
         private String contestName;
-        private String startTime;
+        private String startTime; // ISO-8601 with +05:30 suffix
 
         public UpcomingContestDTO(Long id, String platform, String contestName, String startTime) {
             this.id = id;
             this.platform = platform;
             this.contestName = contestName;
+            // If passed as raw string, keep as-is (already IST offset)
             this.startTime = startTime;
         }
 

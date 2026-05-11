@@ -149,4 +149,14 @@ public class ContestService {
     public List<Contest> getContestsBetween(LocalDateTime start, LocalDateTime end) {
         return contestRepository.findContestsBetween(start, end);
     }
+    /** Delete all contests so they can be re-synced with correct timezone data */
+    public void deleteAllContests() {
+        contestRepository.deleteAll();
+    }
+
+    /** Save a contest entity directly (for timezone correction) */
+    public com.studentworkspace.model.Contest updateContestDirectly(com.studentworkspace.model.Contest contest) {
+        return contestRepository.save(contest);
+    }
+
 }

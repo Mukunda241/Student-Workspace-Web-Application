@@ -1,185 +1,89 @@
 import React, { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { IcoGraduation, IcoDashboard, IcoCheckSquare, IcoFileText, IcoTrophy } from '../utils/icons';
 import '../styles/auth.css';
 
 export const Register = () => {
   const navigate = useNavigate();
-  const { register, error } = useContext(AuthContext);
+  const { register, error: ctxErr } = useContext(AuthContext);
+  const [form, setForm]       = useState({ firstName:'', lastName:'', email:'', password:'', confirm:'' });
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [formError, setFormError] = useState('');
+  const [err, setErr]         = useState('');
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setFormError('');
-  };
+  const ch = (k) => (e) => setForm(p=>({...p,[k]:e.target.value}));
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setFormError('');
-
-    // Validation
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
-      setFormError('All fields are required');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      setFormError('Password must be at least 6 characters long');
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setFormError('Passwords do not match');
-      return;
-    }
-
+  const submit = async (e) => {
+    e.preventDefault(); setErr('');
+    if (!form.firstName||!form.lastName||!form.email||!form.password) { setErr('All fields required'); return; }
+    if (form.password.length < 6) { setErr('Password must be at least 6 characters'); return; }
+    if (form.password !== form.confirm) { setErr('Passwords do not match'); return; }
     try {
       setLoading(true);
-      await register({
-        name: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email,
-        password: formData.password,
-      });
+      await register({ name:`${form.firstName} ${form.lastName}`, email:form.email, password:form.password });
       navigate('/dashboard');
-    } catch (err) {
-      setFormError(err.response?.data?.message || 'Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) {
+      setErr(e.response?.data?.message || 'Registration failed');
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-content">
-        {/* Left Side - Branding */}
-        <div className="auth-left">
-          <div className="auth-branding">
-            <div className="auth-logo">🎓</div>
-            <h1 className="auth-title">Student Workspace</h1>
-            <p className="auth-subtitle">Your complete academic management platform.</p>
-          </div>
-
+    <div className="auth-page">
+      <div className="auth-left">
+        <div className="auth-inner">
+          <div className="auth-logo"><IcoGraduation size={28}/></div>
+          <h1 className="auth-h">Join Workspace</h1>
+          <p className="auth-sub">Free forever. Start organising your academic life today.</p>
           <div className="auth-features">
-            <div className="auth-feature">
-              <span className="auth-feature-icon">✨</span>
-              <span>Easy and secure account setup</span>
-            </div>
-            <div className="auth-feature">
-              <span className="auth-feature-icon">🔒</span>
-              <span>Your data is protected with encryption</span>
-            </div>
-            <div className="auth-feature">
-              <span className="auth-feature-icon">⚡</span>
-              <span>Get started in just a few seconds</span>
-            </div>
-            <div className="auth-feature">
-              <span className="auth-feature-icon">🎯</span>
-              <span>Join a community of motivated students</span>
-            </div>
+            {[
+              { Icon: IcoDashboard,   text: 'Personal academic dashboard' },
+              { Icon: IcoCheckSquare, text: 'Kanban + Pomodoro task manager' },
+              { Icon: IcoFileText,    text: 'Markdown note editor' },
+              { Icon: IcoTrophy,      text: 'Contest tracker & reminders' },
+            ].map(({ Icon, text }, i) => (
+              <div key={i} className="auth-feat">
+                <div className="auth-feat-icon"><Icon size={17}/></div>
+                <span>{text}</span>
+              </div>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* Right Side - Register Form */}
-        <div className="auth-card">
-          <h1>Get Started</h1>
-          <h2>Create your free account</h2>
-
-          {(formError || error) && (
-            <div className="error-message">{formError || error}</div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label>First Name</label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  placeholder="John"
-                  disabled={loading}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Last Name</label>
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  placeholder="Doe"
-                  disabled={loading}
-                  required
-                />
-              </div>
-            </div>
-
+      <div className="auth-right">
+        <h1>Create account</h1>
+        <h2>Free forever, no credit card needed</h2>
+        {(err||ctxErr) && <div className="form-error">{err||ctxErr}</div>}
+        <form className="auth-form" onSubmit={submit}>
+          <div className="form-row">
             <div className="form-group">
-              <label>Email Address</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="you@example.com"
-                disabled={loading}
-                required
-              />
+              <label>First name</label>
+              <input value={form.firstName} placeholder="John" disabled={loading} onChange={ch('firstName')} required/>
             </div>
-
             <div className="form-group">
-              <label>Password</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Minimum 6 characters"
-                disabled={loading}
-                required
-              />
+              <label>Last name</label>
+              <input value={form.lastName} placeholder="Doe" disabled={loading} onChange={ch('lastName')} required/>
             </div>
-
-            <div className="form-group">
-              <label>Confirm Password</label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                placeholder="Re-enter your password"
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading} 
-              className="btn-primary"
-              style={{ width: '100%' }}
-            >
-              {loading ? '✨ Creating account...' : 'Create Account'}
-            </button>
-          </form>
-
-          <p className="auth-link">
-            Already have an account? <a href="/login">Sign in here</a>
-          </p>
-        </div>
+          </div>
+          <div className="form-group">
+            <label>Email address</label>
+            <input type="email" value={form.email} placeholder="you@example.com" disabled={loading} onChange={ch('email')} required/>
+          </div>
+          <div className="form-group">
+            <label>Password</label>
+            <input type="password" value={form.password} placeholder="Min. 6 characters" disabled={loading} onChange={ch('password')} required/>
+          </div>
+          <div className="form-group">
+            <label>Confirm password</label>
+            <input type="password" value={form.confirm} placeholder="Repeat password" disabled={loading} onChange={ch('confirm')} required/>
+          </div>
+          <button type="submit" disabled={loading} className="btn btn-primary btn-auth">
+            {loading ? 'Creating account…' : 'Create Account'}
+          </button>
+        </form>
+        <p className="auth-link">Already have an account? <a href="/login">Sign in</a></p>
       </div>
     </div>
   );
 };
+export default Register;

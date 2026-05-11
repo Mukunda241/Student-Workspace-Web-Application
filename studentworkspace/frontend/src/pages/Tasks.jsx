@@ -1,747 +1,385 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect, useContext, useCallback, memo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
-import { API_BASE } from '../utils/constants';
-import { MdPlaylistAddCheck, MdSearch } from 'react-icons/md';
+import { taskService, projectService } from '../services/authService';
+import PomodoroTimer from '../components/PomodoroTimer';
+import {
+  IcoPlus, IcoSearch, IcoEdit, IcoTrash, IcoX,
+  IcoCalendar, IcoClock, IcoKanban, IcoRows
+} from '../utils/icons';
 import '../styles/tasks.css';
 
-const Tasks = () => {
-  const { user } = useAuth();
-  const [tasks, setTasks] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [filterProjectId, setFilterProjectId] = useState(null);
-  const [viewMode, setViewMode] = useState('kanban');
-  const [draggedTask, setDraggedTask] = useState(null);
-  
-  // Pomodoro state
-  const [pomodoroActive, setpomodoroActive] = useState(false);
-  const [pomodoroTaskId, setpomodoroTaskId] = useState(null);
-  const [timeRemaining, setTimeRemaining] = useState(25 * 60);
-  const pomodoroIntervalRef = useRef(null);
-  const [focusMode, setFocusMode] = useState(false);
+const EMPTY = { title:'', description:'', priority:'MEDIUM', deadline:'', status:'TODO', projectId:'' };
 
-  // Filter & Search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterPriority, setFilterPriority] = useState('ALL');
-  const [filterStatus, setFilterStatus] = useState('ALL');
-  const [selectedTasks, setSelectedTasks] = useState(new Set());
+// FIX: TaskCard defined OUTSIDE main component so it doesn't re-create on every render
+// This was breaking drag-and-drop state
+const TaskCard = memo(({ task, selected, onSelect, onEdit, onDelete, onPomodoro }) => (
+  <div
+    className={`k-card${selected ? ' selected' : ''}`}
+    draggable
+    onDragStart={e => { e.dataTransfer.setData('taskId', String(task.id)); }}
+  >
+    <div className="k-card-top">
+      <input type="checkbox" checked={selected}
+        onChange={() => onSelect(task.id)}
+        onClick={e => e.stopPropagation()}
+        style={{ width:'auto', cursor:'pointer', flexShrink:0 }} />
+      <span className={`pri-dot ${(task.priority||'medium').toLowerCase()}`} />
+      <span className="badge" style={{
+        fontSize:'.63rem', padding:'1px 6px',
+        background: task.priority==='HIGH' ? 'var(--red-100)' : task.priority==='LOW' ? 'var(--green-100)' : 'var(--amber-100)',
+        color:      task.priority==='HIGH' ? 'var(--red-800)' : task.priority==='LOW' ? 'var(--green-800)' : 'var(--amber-800)',
+      }}>{task.priority || 'MED'}</span>
+    </div>
+    <div className="k-card-title">{task.title}</div>
+    {task.description && <div className="k-card-desc">{task.description}</div>}
+    <div className="k-card-meta">
+      {task.deadline && <span className="k-meta"><IcoCalendar size={11}/>{task.deadline}</span>}
+      {task.timeSpent > 0 && <span className="k-meta"><IcoClock size={11}/>{Math.round(task.timeSpent/60)}h</span>}
+    </div>
+    <div className="k-card-actions">
+      <button className="btn-icon" title="Start Pomodoro" onClick={() => onPomodoro(task)}>🍅</button>
+      <button className="btn-icon" onClick={() => onEdit(task)}><IcoEdit size={14}/></button>
+      <button className="btn-icon danger" onClick={() => onDelete(task.id)}><IcoTrash size={14}/></button>
+    </div>
+  </div>
+));
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    priority: 'MED',
-    dueDate: '',
-    recurrence: 'NONE',
-    status: 'TODO',
-    projectId: null
-  });
+export const Tasks = () => {
+  const navigate     = useNavigate();
+  const location     = useLocation();
+  const { user }     = useContext(AuthContext);
+  const [tasks,      setTasks]      = useState([]);
+  const [projects,   setProjects]   = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [view,       setView]       = useState('kanban');
+  const [showForm,   setShowForm]   = useState(false);
+  const [editing,    setEditing]    = useState(null);
+  const [formData,   setFormData]   = useState(EMPTY);
+  const [formErr,    setFormErr]    = useState('');
+  const [search,     setSearch]     = useState('');
+  const [filterPri,  setFilterPri]  = useState('ALL');
+  const [filterSt,   setFilterSt]   = useState('ALL');
+  const [filterProj, setFilterProj] = useState('');
+  const [selected,   setSelected]   = useState(new Set());
+  const [pomoTask,   setPomoTask]   = useState(null);
+  const [error,      setError]      = useState('');
 
   useEffect(() => {
-    fetchProjects();
-    fetchTasks();
-  }, [filterProjectId]);
+    const params = new URLSearchParams(location.search);
+    const proj = params.get('project');
+    if (proj) setFilterProj(proj);
+  }, [location.search]);
 
-  const fetchProjects = async () => {
+  const load = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/projects/user/${user?.id}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setProjects(Array.isArray(data) ? data : []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch projects:', err);
-    }
+      const [tRes, pRes] = await Promise.all([
+        taskService.getUserTasks(user.id),
+        projectService.getUserProjects(user.id),
+      ]);
+      setTasks(Array.isArray(tRes.data) ? tRes.data : []);
+      setProjects(Array.isArray(pRes.data) ? pRes.data : []);
+      setError('');
+    } catch (e) {
+      if (e.response?.status === 401) navigate('/login');
+      setError('Failed to load tasks. Check the backend is running.');
+    } finally { setLoading(false); }
+  }, [user?.id, navigate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openNew  = () => { setEditing(null); setFormData(EMPTY); setFormErr(''); setShowForm(true); };
+  const openEdit = (t) => {
+    setEditing(t);
+    setFormData({ title:t.title||'', description:t.description||'',
+      priority:t.priority||'MEDIUM', deadline:t.deadline||'',
+      status:t.status||'TODO', projectId:t.projectId ? String(t.projectId) : '' });
+    setFormErr(''); setShowForm(true);
   };
 
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      const url = filterProjectId 
-        ? `${API_BASE}/api/tasks/project/${filterProjectId}`
-        : `${API_BASE}/api/tasks/user/${user?.id}`;
-      
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(Array.isArray(data) ? data : data.tasks || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch tasks:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Pomodoro Timer Effect
-  useEffect(() => {
-    if (pomodoroActive) {
-      setFocusMode(true);
-      pomodoroIntervalRef.current = setInterval(() => {
-        setTimeRemaining(prev => {
-          if (prev <= 1) {
-            clearInterval(pomodoroIntervalRef.current);
-            handlePomodoroComplete();
-            return 25 * 60;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (pomodoroIntervalRef.current) clearInterval(pomodoroIntervalRef.current);
-      setFocusMode(false);
-    }
-    return () => {
-      if (pomodoroIntervalRef.current) clearInterval(pomodoroIntervalRef.current);
-    };
-  }, [pomodoroActive]);
-
-  const handlePomodoroComplete = async () => {
-    setpomodoroActive(false);
-    try {
-      const response = await fetch(`${API_BASE}/api/tasks/${pomodoroTaskId}/log-time`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ minutes: 25 })
-      });
-      if (response.ok) {
-        setTasks(tasks.map(t => 
-          t.id === pomodoroTaskId ? { ...t, timeSpent: (t.timeSpent || 0) + 25 } : t
-        ));
-        alert('✅ Pomodoro completed! 25 minutes logged.');
-      }
-    } catch (err) {
-      console.error('Failed to log time:', err);
-    }
-  };
-
-  const startPomodoro = (taskId) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    setpomodoroTaskId(taskId);
-    setTimeRemaining(25 * 60);
-    setpomodoroActive(true);
-    updateTaskStatus(taskId, 'DOING');
-  };
-
-  const stopPomodoro = () => {
-    setpomodoroActive(false);
-    setFocusMode(false);
-    if (pomodoroIntervalRef.current) clearInterval(pomodoroIntervalRef.current);
-  };
-
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const updateTaskStatus = async (taskId, newStatus) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/tasks/${taskId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (response.ok) {
-        setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
-      }
-    } catch (err) {
-      console.error('Failed to update task status:', err);
-    }
-  };
-
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (!formData.title.trim()) return;
-
+    if (!formData.title.trim()) { setFormErr('Title is required'); return; }
+    const payload = {
+      title: formData.title.trim(),
+      description: formData.description,
+      priority: formData.priority,
+      status: formData.status,
+      deadline: formData.deadline || null,
+      projectId: formData.projectId ? Number(formData.projectId) : null,
+      timeSpent: editing?.timeSpent || 0,
+      completed: formData.status === 'DONE',
+    };
     try {
-      const method = selectedTask ? 'PUT' : 'POST';
-      const url = selectedTask 
-        ? `${API_BASE}/api/tasks/${selectedTask.id}`
-        : `${API_BASE}/api/tasks/create/${user?.id}`;
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        const newTask = await response.json();
-        if (selectedTask) {
-          setTasks(tasks.map(t => t.id === newTask.id ? newTask : t));
-        } else {
-          setTasks([newTask, ...tasks]);
-        }
-        resetForm();
+      if (editing) {
+        const { data } = await taskService.updateTask(editing.id, payload);
+        setTasks(prev => prev.map(t => t.id === data.id ? data : t));
+      } else {
+        const { data } = await taskService.createTask(user.id, payload);
+        setTasks(prev => [data, ...prev]);
       }
-    } catch (err) {
-      console.error('Failed to save task:', err);
+      setShowForm(false); setFormErr('');
+    } catch (e) {
+      setFormErr(e.response?.data?.message || e.response?.data || 'Failed to save task');
     }
   };
 
-  const handleDelete = async (taskId) => {
+  const del = useCallback(async (id) => {
     if (!window.confirm('Delete this task?')) return;
     try {
-      await fetch(`${API_BASE}/api/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      setTasks(tasks.filter(t => t.id !== taskId));
-    } catch (err) {
-      console.error('Failed to delete task:', err);
-    }
+      await taskService.deleteTask(id);
+      setTasks(prev => prev.filter(t => t.id !== id));
+    } catch { setError('Failed to delete task'); }
+  }, []);
+
+  const bulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} task(s)?`)) return;
+    await Promise.all([...selected].map(id => taskService.deleteTask(id)));
+    setTasks(prev => prev.filter(t => !selected.has(t.id)));
+    setSelected(new Set());
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedTasks.size === 0) return;
-    if (!window.confirm(`Delete ${selectedTasks.size} task(s)?`)) return;
+  // FIX: use updateTaskStatus (PATCH /status) not updateTask (PUT) for drag-drop
+  // updateTask requires full payload; updateTaskStatus only needs {status}
+  const changeStatus = useCallback(async (id, status) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
     try {
-      for (const taskId of selectedTasks) {
-        await fetch(`${API_BASE}/api/tasks/${taskId}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-      }
-      setTasks(tasks.filter(t => !selectedTasks.has(t.id)));
-      setSelectedTasks(new Set());
-    } catch (err) {
-      console.error('Failed to bulk delete:', err);
-    }
-  };
+      await taskService.updateTaskStatus(id, status);
+    } catch { load(); }
+  }, [load]);
 
-  const handleBulkStatusChange = async (newStatus) => {
-    if (selectedTasks.size === 0) return;
-    try {
-      for (const taskId of selectedTasks) {
-        await fetch(`${API_BASE}/api/tasks/${taskId}/status`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          body: JSON.stringify({ status: newStatus })
-        });
-      }
-      setTasks(tasks.map(t => 
-        selectedTasks.has(t.id) ? { ...t, status: newStatus } : t
-      ));
-      setSelectedTasks(new Set());
-    } catch (err) {
-      console.error('Failed to bulk update:', err);
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      priority: 'MED',
-      dueDate: '',
-      recurrence: 'NONE',
-      status: 'TODO',
-      projectId: null
+  const toggleSelect = useCallback((id) => {
+    setSelected(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
     });
-    setSelectedTask(null);
-    setShowForm(false);
-  };
+  }, []);
 
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    const parsedValue = name === 'projectId' && value ? parseInt(value) : value;
-    setFormData(prev => ({ ...prev, [name]: parsedValue }));
-  };
-
-  const handleDragStart = (e, task) => {
-    setDraggedTask(task);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
+  const handleDrop = useCallback((e, status) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
+    const id = Number(e.dataTransfer.getData('taskId'));
+    if (id) changeStatus(id, status);
+  }, [changeStatus]);
 
-  const handleDrop = (e, status) => {
-    e.preventDefault();
-    if (draggedTask) {
-      updateTaskStatus(draggedTask.id, status);
-      setDraggedTask(null);
-    }
-  };
+  const filtered = tasks.filter(t => {
+    const ms  = !search || t.title?.toLowerCase().includes(search.toLowerCase());
+    const mp  = filterPri === 'ALL' || t.priority === filterPri;
+    const mst = filterSt  === 'ALL' || t.status === filterSt;
+    const mpr = !filterProj || String(t.projectId) === String(filterProj);
+    return ms && mp && mst && mpr;
+  });
 
-  const getPriorityColor = (priority) => {
-    switch(priority) {
-      case 'HIGH': return '#ef4444';
-      case 'MED': return '#f59e0b';
-      case 'LOW': return '#10b981';
-      default: return '#6b7280';
-    }
-  };
+  const byStatus = (s) => filtered.filter(t => t.status === s);
 
-  const getPriorityBadge = (priority) => {
-    switch(priority) {
-      case 'HIGH': return '🔴 High';
-      case 'MED': return '🟡 Medium';
-      case 'LOW': return '🟢 Low';
-      default: return priority;
-    }
-  };
-
-  const getProjectName = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
-    return project ? project.title : 'No Project';
-  };
-
-  const getProjectColor = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
-    return project ? project.colorCode : '#9ca3af';
-  };
-
-  const getTasksByStatus = (status) => {
-    let filtered = tasks.filter(t => t.status === status);
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(t =>
-        t.title.toLowerCase().includes(query) ||
-        (t.description && t.description.toLowerCase().includes(query))
-      );
-    }
-
-    if (filterPriority !== 'ALL') {
-      filtered = filtered.filter(t => t.priority === filterPriority);
-    }
-
-    if (filterProjectId) {
-      filtered = filtered.filter(t => t.projectId === filterProjectId);
-    }
-
-    return filtered.sort((a, b) => {
-      const priorityOrder = { HIGH: 0, MED: 1, LOW: 2 };
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
-    });
-  };
-
-  const toggleTaskSelection = (taskId) => {
-    const newSelected = new Set(selectedTasks);
-    if (newSelected.has(taskId)) {
-      newSelected.delete(taskId);
-    } else {
-      newSelected.add(taskId);
-    }
-    setSelectedTasks(newSelected);
-  };
-
-  const formatDueDate = (dateString) => {
-    if (!dateString) return 'No due date';
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const isOverdue = (task) => {
-    if (!task.dueDate || task.status === 'DONE') return false;
-    return new Date(task.dueDate) < new Date();
-  };
-
-  if (loading) {
-    return <MainLayout><div className="loading">Loading tasks...</div></MainLayout>;
-  }
-
-  const todoTasks = getTasksByStatus('TODO');
-  const doingTasks = getTasksByStatus('DOING');
-  const doneTasks = getTasksByStatus('DONE');
+  const cols = [
+    { key:'TODO',        label:'To Do' },
+    { key:'IN_PROGRESS', label:'In Progress' },
+    { key:'DONE',        label:'Done' },
+  ];
 
   return (
-    <MainLayout>
-      <div className={`tasks-container ${focusMode ? 'focus-mode' : ''}`}>
-        {focusMode && <div className="focus-overlay"></div>}
-
-        <div className="tasks-content">
-          <div className="tasks-header">
-            <div className="header-title">
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                marginBottom: '0.5rem'
-              }}>
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '16px',
-                  background: 'linear-gradient(135deg, #047857 0%, #065f46 100%)',
-                  boxShadow: '0 6px 16px rgba(5, 150, 105, 0.3)'
-                }}>
-                  <MdPlaylistAddCheck size={36} style={{color: '#6ee7b7'}} />
-                </div>
-                <h2 style={{fontSize: '2rem', fontWeight: '700', color: '#1f2937', margin: 0}}>Tasks</h2>
-              </div>
-              <p style={{fontSize: '1rem', color: '#6b7280', marginTop: '0.5rem'}}>Organize, prioritize, and track your work with Pomodoro focus sessions</p>
+    <MainLayout pageTitle="Tasks">
+      {/* Pomodoro Modal */}
+      {pomoTask && (
+        <div className="modal-overlay" onClick={e => e.target===e.currentTarget && setPomoTask(null)}>
+          <div className="modal" style={{ maxWidth:340 }}>
+            <div className="modal-header">
+              <h3>🍅 Pomodoro</h3>
+              <button className="btn-icon" onClick={() => setPomoTask(null)}><IcoX size={16}/></button>
             </div>
-            <button className="btn-primary" onClick={() => setShowForm(!showForm)} style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              fontSize: '1rem',
-              fontWeight: '600'
-            }}>
-              ➕ New Task
-            </button>
+            <PomodoroTimer taskTitle={pomoTask.title} />
           </div>
+        </div>
+      )}
 
-          <div className="global-filter-bar">
-            <div className="filter-row">
-              <div className="search-box">
-                <input
-                  type="text"
-                  placeholder="🔍 Search tasks..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="search-input"
-                />
-              </div>
-
-              <div className="filter-group">
-                <label>Priority:</label>
-                <select 
-                  value={filterPriority} 
-                  onChange={(e) => setFilterPriority(e.target.value)}
-                  className="filter-select-small"
-                >
-                  <option value="ALL">All</option>
-                  <option value="HIGH">🔴 High</option>
-                  <option value="MED">🟡 Medium</option>
-                  <option value="LOW">🟢 Low</option>
-                </select>
-              </div>
-
-              <div className="filter-group">
-                <label>Status:</label>
-                <select 
-                  value={filterStatus} 
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="filter-select-small"
-                >
-                  <option value="ALL">All</option>
-                  <option value="TODO">📋 To-Do</option>
-                  <option value="DOING">⚡ Doing</option>
-                  <option value="DONE">✅ Done</option>
-                </select>
-              </div>
+      {/* Task Form Modal */}
+      {showForm && (
+        <div className="modal-overlay" onClick={e => e.target===e.currentTarget && setShowForm(false)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h3>{editing ? 'Edit Task' : 'New Task'}</h3>
+              <button className="btn-icon" onClick={() => setShowForm(false)}><IcoX size={16}/></button>
             </div>
-          </div>
-
-          <div className="view-toggle">
-            <button
-              className={`toggle-btn ${viewMode === 'kanban' ? 'active' : ''}`}
-              onClick={() => setViewMode('kanban')}
-            >
-              📊 Kanban
-            </button>
-            <select 
-              value={filterProjectId || ''} 
-              onChange={(e) => setFilterProjectId(e.target.value ? parseInt(e.target.value) : null)}
-              className="filter-select"
-            >
-              <option value="">🔍 All Projects</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {pomodoroActive && (
-            <div className="pomodoro-widget">
-              <h3>🍅 Focus Mode Active</h3>
-              <div className="pomodoro-timer">{formatTime(timeRemaining)}</div>
-              <p className="pomodoro-task">{tasks.find(t => t.id === pomodoroTaskId)?.title}</p>
-              <button className="btn-stop-pomodoro" onClick={stopPomodoro}>Stop Focus</button>
-            </div>
-          )}
-
-          {selectedTasks.size > 0 && (
-            <div className="bulk-actions-bar">
-              <span>{selectedTasks.size} selected</span>
-              <button onClick={() => handleBulkStatusChange('DONE')}>✅ Mark Done</button>
-              <button onClick={() => handleBulkStatusChange('DOING')}>⚡ Mark Doing</button>
-              <button onClick={() => handleBulkStatusChange('TODO')}>📋 Mark Todo</button>
-              <button onClick={handleBulkDelete} className="btn-delete">🗑️ Delete</button>
-              <button onClick={() => setSelectedTasks(new Set())} className="btn-cancel">Cancel</button>
-            </div>
-          )}
-
-          {showForm && (
-            <div className="create-task-section">
-              <form className="task-form" onSubmit={handleSubmit}>
-                <h3>{selectedTask ? 'Edit Task' : 'Create New Task'}</h3>
-                
+            {formErr && <div className="form-error">{formErr}</div>}
+            <form onSubmit={submit}>
+              <div className="form-group">
+                <label>Title *</label>
+                <input value={formData.title}
+                  onChange={e => setFormData(p => ({...p, title:e.target.value}))}
+                  placeholder="Task title…" autoFocus required />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea value={formData.description}
+                  onChange={e => setFormData(p => ({...p, description:e.target.value}))}
+                  placeholder="Optional description…" rows={3} />
+              </div>
+              <div className="form-row">
                 <div className="form-group">
-                  <label>Task Title *</label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleFormChange}
-                    placeholder="What do you need to do?"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Description</label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleFormChange}
-                    placeholder="Add notes or details..."
-                  />
-                </div>
-
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Priority</label>
-                    <select name="priority" value={formData.priority} onChange={handleFormChange}>
-                      <option value="LOW">🟢 Low</option>
-                      <option value="MED">🟡 Medium</option>
-                      <option value="HIGH">🔴 High</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Due Date</label>
-                    <input
-                      type="date"
-                      name="dueDate"
-                      value={formData.dueDate}
-                      onChange={handleFormChange}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Project</label>
-                    <select name="projectId" value={formData.projectId || ''} onChange={handleFormChange}>
-                      <option value="">-- No Project --</option>
-                      {projects.map(p => (
-                        <option key={p.id} value={p.id}>{p.title}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Recurrence</label>
-                    <select name="recurrence" value={formData.recurrence} onChange={handleFormChange}>
-                      <option value="NONE">No Recurrence</option>
-                      <option value="DAILY">Daily</option>
-                      <option value="WEEKLY">Weekly</option>
-                      <option value="MONTHLY">Monthly</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Status</label>
-                  <select name="status" value={formData.status} onChange={handleFormChange}>
-                    <option value="TODO">📋 To-Do</option>
-                    <option value="DOING">⚡ In Progress</option>
-                    <option value="DONE">✅ Done</option>
+                  <label>Priority</label>
+                  <select value={formData.priority}
+                    onChange={e => setFormData(p => ({...p, priority:e.target.value}))}>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
                   </select>
                 </div>
-
-                <div className="form-actions">
-                  <button type="submit" className="btn-primary">
-                    {selectedTask ? '💾 Update Task' : '✨ Create Task'}
-                  </button>
-                  <button type="button" className="btn-secondary" onClick={resetForm}>
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {viewMode === 'kanban' && (
-            <div className="kanban-board">
-              <div className="kanban-column" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, 'TODO')}>
-                <div className="column-header">
-                  <h3>📋 To-Do ({todoTasks.length})</h3>
-                </div>
-                <div className="tasks-column">
-                  {todoTasks.map(task => (
-                    <div
-                      key={task.id}
-                      className={`task-card ${isOverdue(task) ? 'overdue' : ''} ${selectedTasks.has(task.id) ? 'selected' : ''}`}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task)}
-                    >
-                      <input 
-                        type="checkbox"
-                        className="task-checkbox"
-                        checked={selectedTasks.has(task.id)}
-                        onChange={() => toggleTaskSelection(task.id)}
-                      />
-                      <div className="task-priority" style={{ backgroundColor: getPriorityColor(task.priority) }}></div>
-                      {task.projectId && (
-                        <div className="task-project-badge" style={{ backgroundColor: getProjectColor(task.projectId) }}>
-                          {getProjectName(task.projectId).substring(0, 12)}
-                        </div>
-                      )}
-                      <div className="task-content">
-                        <h4>{task.title}</h4>
-                        {task.description && <p className="task-description">{task.description}</p>}
-                        <div className="task-meta">
-                          <span className="priority-badge">{getPriorityBadge(task.priority)}</span>
-                          <span className="due-date">📅 {formatDueDate(task.dueDate)}</span>
-                          {task.timeSpent > 0 && <span className="time-spent">⏱️ {task.timeSpent}m</span>}
-                        </div>
-                        {task.recurrence !== 'NONE' && <div className="recurrence-badge">🔄 {task.recurrence}</div>}
-                      </div>
-                      <div className="task-actions">
-                        <button className="btn-pomodoro" onClick={() => startPomodoro(task.id)}>🍅</button>
-                        <button className="btn-edit" onClick={() => { setSelectedTask(task); setFormData(task); setShowForm(true); }}>✏️</button>
-                        <button className="btn-delete" onClick={() => handleDelete(task.id)}>🗑️</button>
-                      </div>
-                    </div>
-                  ))}
-                  {todoTasks.length === 0 && <div className="empty-column">No tasks here. Great start! 🎉</div>}
+                <div className="form-group">
+                  <label>Status</label>
+                  <select value={formData.status}
+                    onChange={e => setFormData(p => ({...p, status:e.target.value}))}>
+                    <option value="TODO">To Do</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="DONE">Done</option>
+                  </select>
                 </div>
               </div>
-
-              <div className="kanban-column" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, 'DOING')}>
-                <div className="column-header">
-                  <h3>⚡ In Progress ({doingTasks.length})</h3>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Deadline</label>
+                  <input type="date" value={formData.deadline}
+                    onChange={e => setFormData(p => ({...p, deadline:e.target.value}))} />
                 </div>
-                <div className="tasks-column">
-                  {doingTasks.map(task => (
-                    <div
-                      key={task.id}
-                      className={`task-card active ${isOverdue(task) ? 'overdue' : ''} ${selectedTasks.has(task.id) ? 'selected' : ''}`}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task)}
-                    >
-                      <input 
-                        type="checkbox"
-                        className="task-checkbox"
-                        checked={selectedTasks.has(task.id)}
-                        onChange={() => toggleTaskSelection(task.id)}
-                      />
-                      <div className="task-priority" style={{ backgroundColor: getPriorityColor(task.priority) }}></div>
-                      {task.projectId && (
-                        <div className="task-project-badge" style={{ backgroundColor: getProjectColor(task.projectId) }}>
-                          {getProjectName(task.projectId).substring(0, 12)}
-                        </div>
-                      )}
-                      <div className="task-content">
-                        <h4>{task.title}</h4>
-                        {task.description && <p className="task-description">{task.description}</p>}
-                        <div className="task-meta">
-                          <span className="priority-badge">{getPriorityBadge(task.priority)}</span>
-                          <span className="due-date">📅 {formatDueDate(task.dueDate)}</span>
-                          {task.timeSpent > 0 && <span className="time-spent">⏱️ {task.timeSpent}m</span>}
-                        </div>
-                        {task.recurrence !== 'NONE' && <div className="recurrence-badge">🔄 {task.recurrence}</div>}
-                      </div>
-                      <div className="task-actions">
-                        <button className="btn-pomodoro" onClick={() => startPomodoro(task.id)}>🍅</button>
-                        <button className="btn-edit" onClick={() => { setSelectedTask(task); setFormData(task); setShowForm(true); }}>✏️</button>
-                        <button className="btn-delete" onClick={() => handleDelete(task.id)}>🗑️</button>
-                      </div>
-                    </div>
-                  ))}
-                  {doingTasks.length === 0 && <div className="empty-column">Pick a task and get started! 💪</div>}
+                <div className="form-group">
+                  <label>Project</label>
+                  <select value={formData.projectId}
+                    onChange={e => setFormData(p => ({...p, projectId:e.target.value}))}>
+                    <option value="">No project</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
                 </div>
               </div>
-
-              <div className="kanban-column" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, 'DONE')}>
-                <div className="column-header">
-                  <h3>✅ Done ({doneTasks.length})</h3>
-                </div>
-                <div className="tasks-column">
-                  {doneTasks.map(task => (
-                    <div
-                      key={task.id}
-                      className={`task-card completed ${selectedTasks.has(task.id) ? 'selected' : ''}`}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task)}
-                    >
-                      <input 
-                        type="checkbox"
-                        className="task-checkbox"
-                        checked={selectedTasks.has(task.id)}
-                        onChange={() => toggleTaskSelection(task.id)}
-                      />
-                      <div className="task-priority" style={{ backgroundColor: getPriorityColor(task.priority) }}></div>
-                      {task.projectId && (
-                        <div className="task-project-badge" style={{ backgroundColor: getProjectColor(task.projectId) }}>
-                          {getProjectName(task.projectId).substring(0, 12)}
-                        </div>
-                      )}
-                      <div className="task-content">
-                        <h4>{task.title}</h4>
-                        {task.description && <p className="task-description">{task.description}</p>}
-                        <div className="task-meta">
-                          <span className="priority-badge">{getPriorityBadge(task.priority)}</span>
-                          <span className="due-date">📅 {formatDueDate(task.dueDate)}</span>
-                          {task.timeSpent > 0 && <span className="time-spent">⏱️ {task.timeSpent}m</span>}
-                        </div>
-                      </div>
-                      <div className="task-actions">
-                        <button className="btn-delete" onClick={() => handleDelete(task.id)}>🗑️</button>
-                      </div>
-                    </div>
-                  ))}
-                  {doneTasks.length === 0 && <div className="empty-column">All tasks completed! 🎉</div>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {pomodoroActive && (
-            <div className="pomodoro-timer-display">
-              <div className="timer-content">
-                <h2>🍅 Focus Time</h2>
-                <div className="timer-display">{formatTime(timeRemaining)}</div>
-                <button onClick={stopPomodoro} className="btn-stop-pomodoro">
-                  Stop Timer
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">
+                  {editing ? 'Update Task' : 'Create Task'}
                 </button>
               </div>
-            </div>
-          )}
+            </form>
+          </div>
         </div>
+      )}
+
+      <div className="tasks-wrap">
+        {error && <div className="error-msg"><IcoX size={14}/>{error}</div>}
+
+        {/* Toolbar */}
+        <div className="tasks-toolbar">
+          <div className="search-box">
+            <IcoSearch size={14}/>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tasks…"/>
+          </div>
+          <select value={filterPri} onChange={e => setFilterPri(e.target.value)}>
+            <option value="ALL">All priorities</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
+          </select>
+          <select value={filterSt} onChange={e => setFilterSt(e.target.value)}>
+            <option value="ALL">All statuses</option>
+            <option value="TODO">To Do</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="DONE">Done</option>
+          </select>
+          <select value={filterProj} onChange={e => setFilterProj(e.target.value)}>
+            <option value="">All projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+          </select>
+          <div style={{ marginLeft:'auto', display:'flex', gap:'.4rem', alignItems:'center' }}>
+            {selected.size > 0 && (
+              <button className="btn btn-danger btn-sm" onClick={bulkDelete}>
+                Delete ({selected.size})
+              </button>
+            )}
+            <div className="view-switch">
+              <button className={view==='kanban' ? 'active' : ''} onClick={() => setView('kanban')}>
+                <IcoKanban size={13}/> Kanban
+              </button>
+              <button className={view==='list' ? 'active' : ''} onClick={() => setView('list')}>
+                <IcoRows size={13}/> List
+              </button>
+            </div>
+            <button className="btn btn-primary" onClick={openNew}>
+              <IcoPlus size={15}/> New Task
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="loading-wrap"><div className="spinner"/>Loading tasks…</div>
+        ) : view === 'kanban' ? (
+          <div className="kanban-board">
+            {cols.map(({ key, label }) => (
+              <div key={key}
+                className={`k-col ${key.toLowerCase().replace('_','-')}`}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => handleDrop(e, key)}
+              >
+                <div className="k-col-hdr">
+                  <span className="k-col-title">{label}</span>
+                  <span className="k-count">{byStatus(key).length}</span>
+                </div>
+                <div className="k-cards">
+                  {byStatus(key).map(t => (
+                    <TaskCard key={t.id} task={t}
+                      selected={selected.has(t.id)}
+                      onSelect={toggleSelect}
+                      onEdit={openEdit}
+                      onDelete={del}
+                      onPomodoro={setPomoTask}
+                    />
+                  ))}
+                  {byStatus(key).length === 0 && (
+                    <div className="k-empty">Drop tasks here</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="task-list-wrap">
+            {filtered.length === 0 ? (
+              <div className="empty-state">
+                <IcoPlus size={48} style={{ color:'var(--sl-300)', margin:'0 auto 1rem' }}/>
+                <h3>No tasks yet</h3>
+                <p>Create your first task to get organised</p>
+                <button className="btn btn-primary" onClick={openNew}>
+                  <IcoPlus size={15}/> New Task
+                </button>
+              </div>
+            ) : filtered.map(t => (
+              <div key={t.id} className={`t-list-item ${(t.priority||'').toLowerCase()}`}>
+                <input type="checkbox" checked={selected.has(t.id)}
+                  onChange={() => toggleSelect(t.id)} style={{ width:'auto', cursor:'pointer' }}/>
+                <div className="t-list-info">
+                  <h4>{t.title}</h4>
+                  {t.description && <p>{t.description}</p>}
+                </div>
+                <div className="t-list-badges">
+                  <span className={`badge badge-${(t.status||'todo').toLowerCase().replace('_','-')}`}>
+                    {t.status?.replace('_',' ') || 'TODO'}
+                  </span>
+                  {t.priority && (
+                    <span className={`badge badge-${t.priority.toLowerCase()}`}>{t.priority}</span>
+                  )}
+                  {t.deadline && <span className="badge">{t.deadline}</span>}
+                </div>
+                <div className="t-list-actions">
+                  <button className="btn-icon" onClick={() => setPomoTask(t)} title="Pomodoro">🍅</button>
+                  <button className="btn-icon" onClick={() => openEdit(t)}><IcoEdit size={14}/></button>
+                  <button className="btn-icon danger" onClick={() => del(t.id)}><IcoTrash size={14}/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </MainLayout>
   );
 };
 
-export { Tasks };
 export default Tasks;

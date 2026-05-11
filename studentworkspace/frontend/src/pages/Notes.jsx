@@ -1,682 +1,387 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
-import { MdMenuBook, MdNote } from 'react-icons/md';
+import { noteService, projectService } from '../services/authService';
+import {
+  IcoFileText, IcoPlus, IcoSearch, IcoTrash, IcoX,
+  IcoCheck, IcoBold, IcoItalic, IcoCode, IcoList, IcoTag
+} from '../utils/icons';
 import '../styles/notes.css';
 
+const renderMd = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,'<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code>$1</code>')
+    .replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>')
+    .replace(/^- (.+)$/gm,'<li>$1</li>')
+    .replace(/(<li>[\s\S]+?<\/li>)/g,'<ul>$1</ul>')
+    .replace(/\n\n+/g,'</p><p>')
+    .replace(/^([^<\n].+)$/gm,'<p>$1</p>')
+    .replace(/<p><\/p>/g,'');
+};
+
 const Notes = () => {
-  const navigate = useNavigate();
-  const { user } = React.useContext(AuthContext);
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8082';
+  const navigate  = useNavigate();
+  const { user }  = useContext(AuthContext);
+  const [notes,       setNotes]      = useState([]);
+  const [projects,    setProjects]   = useState([]);
+  const [current,     setCurrent]    = useState(null);
+  const [editTitle,   setEditTitle]  = useState('');
+  const [editContent, setEditContent]= useState('');
+  const [search,      setSearch]     = useState('');
+  const [filterProj,  setFilterProj] = useState('all');
+  const [sideOpen,    setSideOpen]   = useState(true);
+  const [showNew,     setShowNew]    = useState(false);
+  const [newTitle,    setNewTitle]   = useState('');
+  const [newProj,     setNewProj]    = useState('');
+  const [saving,      setSaving]     = useState(false);
+  const [saved,       setSaved]      = useState(false);
+  const [loading,     setLoading]    = useState(false);
+  const [error,       setError]      = useState('');
+  const [split,       setSplit]      = useState(true);
+  const debounceRef = useRef(null);
+  const editorRef   = useRef(null);
 
-  // State Management
-  const [notes, setNotes] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [currentNote, setCurrentNote] = useState(null);
-  const [editContent, setEditContent] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProject, setSelectedProject] = useState('all');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showNewNoteForm, setShowNewNoteForm] = useState(false);
-  const [newNoteTitle, setNewNoteTitle] = useState('');
-  const [newNoteProject, setNewNoteProject] = useState('');
-  const [tags, setTags] = useState([]);
-  const [selectedTag, setSelectedTag] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const debounceTimer = useRef(null);
-
-  // Fetch notes
-  const fetchNotes = useCallback(async () => {
-    if (!user) return;
+  /* ── load ── */
+  const fetchAll = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(`${apiUrl}/api/notes/user/${user.id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setNotes(data);
-        extractTags(data);
-      } else if (response.status === 401) {
-        navigate('/login');
-      }
+      const [nr, pr] = await Promise.all([
+        noteService.getUserNotes(user.id),
+        projectService.getUserProjects(user.id),
+      ]);
+      setNotes(Array.isArray(nr.data) ? nr.data : []);
+      setProjects(Array.isArray(pr.data) ? pr.data : []);
       setError('');
-    } catch (err) {
-      setError('Failed to fetch notes');
-      console.error('Error fetching notes:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [user, apiUrl, navigate]);
+    } catch (e) {
+      if (e.response?.status === 401) navigate('/login');
+      setError('Failed to load notes');
+    } finally { setLoading(false); }
+  }, [user?.id, navigate]);
 
-  // Fetch projects
-  const fetchProjects = useCallback(async () => {
-    if (!user) return;
-    try {
-      const response = await fetch(`${apiUrl}/api/projects/user/${user.id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setProjects(data);
-      }
-    } catch (err) {
-      console.error('Error fetching projects:', err);
-    }
-  }, [user, apiUrl]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Extract tags from notes
-  const extractTags = (notesList) => {
-    const tagsSet = new Set();
-    notesList.forEach(note => {
-      const tagMatches = note.content?.match(/#\w+/g) || [];
-      tagMatches.forEach(tag => tagsSet.add(tag));
-    });
-    setTags(Array.from(tagsSet).sort());
-  };
-
-  // Initial load
+  /* sync editor when note changes */
   useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    fetchNotes();
-    fetchProjects();
-  }, [user, navigate, fetchNotes, fetchProjects]);
+    if (current) { setEditTitle(current.title||''); setEditContent(current.content||''); }
+  }, [current?.id]);
 
-  // Debounce auto-save
-  const autoSaveNote = useCallback((content) => {
-    if (!currentNote) return;
+  /* ── auto-save ── */
+  const autoSave = useCallback(async (title, content) => {
+    if (!current) return;
+    // Don't auto-save if title is empty
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const { data } = await noteService.updateNote(current.id, { title: title.trim(), content: content || '' });
+      setNotes(prev => prev.map(n => n.id === data.id ? data : n));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) { console.error('Auto-save failed', e); }
+    finally { setSaving(false); }
+  }, [current]);
 
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
-
-    debounceTimer.current = setTimeout(async () => {
-      try {
-        const response = await fetch(`${apiUrl}/api/notes/update/${currentNote.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: JSON.stringify({
-            title: currentNote.title,
-            content: content,
-          }),
-        });
-
-        if (response.ok) {
-          setSuccessMessage('✓ Saved');
-          setTimeout(() => setSuccessMessage(''), 2000);
-        } else if (response.status === 401) {
-          navigate('/login');
-        }
-      } catch (err) {
-        console.error('Error saving note:', err);
-      }
-    }, 2000);
-  }, [currentNote, apiUrl, navigate]);
-
-  // Handle content change
-  const handleContentChange = (e) => {
-    const newContent = e.target.value;
-    setEditContent(newContent);
-    autoSaveNote(newContent);
+  const onContent = (val) => {
+    setEditContent(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => autoSave(editTitle, val), 1200);
+  };
+  const onTitle = (val) => {
+    setEditTitle(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => autoSave(val, editContent), 1200);
   };
 
-  // Create new note
-  const handleCreateNote = async () => {
-    if (!newNoteTitle.trim() || !newNoteProject) {
-      setError('Please fill in all fields');
-      return;
-    }
+  /* ── create note ──
+     FIX 1: backend NoteRequest has @NotBlank on content — send ' ' (space) not '' 
+     FIX 2: open sidebar & show form when "Create Note" button clicked from empty state */
+  const openNewForm = () => {
+    setSideOpen(true);
+    setShowNew(true);
+    setError('');
+    setNewTitle('');
+    setNewProj(projects[0]?.id ? String(projects[0].id) : '');
+  };
 
+  const createNote = async () => {
+    if (!newTitle.trim()) { setError('Title is required'); return; }
+    const projId = newProj || projects[0]?.id;
+    if (!projId) { setError('Please create a project first before adding notes.'); return; }
     try {
-      const response = await fetch(
-        `${apiUrl}/api/notes/create/${user.id}/${newNoteProject}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: JSON.stringify({
-            title: newNoteTitle,
-            content: '# ' + newNoteTitle + '\n\n',
-          }),
-        }
+      setError('');
+      // Backend NoteRequest.content now has no @NotBlank — can send empty string
+      const { data } = await noteService.createNote(
+        user.id, projId,
+        { title: newTitle.trim(), content: '' }
       );
-
-      if (response.ok) {
-        const newNote = await response.json();
-        setNotes([newNote, ...notes]);
-        setCurrentNote(newNote);
-        setEditContent(newNote.content);
-        setNewNoteTitle('');
-        setNewNoteProject('');
-        setShowNewNoteForm(false);
-        setSuccessMessage('Note created');
-        setTimeout(() => setSuccessMessage(''), 2000);
-      } else if (response.status === 401) {
-        navigate('/login');
-      }
-    } catch (err) {
-      setError('Failed to create note');
-      console.error('Error creating note:', err);
+      setNotes(prev => [data, ...prev]);
+      setCurrent(data);
+      setEditTitle(data.title);
+      setEditContent('');
+      setShowNew(false);
+      setNewTitle('');
+      setNewProj('');
+    } catch (e) {
+      setError(e.response?.data?.message || e.response?.data || 'Failed to create note');
     }
   };
 
-  // Delete note
-  const handleDeleteNote = async (noteId) => {
-    if (!window.confirm('Delete this note? This action cannot be undone.')) {
-      return;
-    }
-
+  /* ── delete ── */
+  const deleteNote = async (id, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Delete this note?')) return;
     try {
-      const response = await fetch(`${apiUrl}/api/notes/delete/${noteId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        setNotes(notes.filter(n => n.id !== noteId));
-        if (currentNote?.id === noteId) {
-          setCurrentNote(null);
-          setEditContent('');
-        }
-        setSuccessMessage('Note deleted');
-        setTimeout(() => setSuccessMessage(''), 2000);
-      } else if (response.status === 401) {
-        navigate('/login');
-      }
-    } catch (err) {
-      setError('Failed to delete note');
-      console.error('Error deleting note:', err);
-    }
+      await noteService.deleteNote(id);
+      setNotes(prev => prev.filter(n => n.id !== id));
+      if (current?.id === id) { setCurrent(null); setEditTitle(''); setEditContent(''); }
+    } catch { setError('Failed to delete note'); }
   };
 
-  // Handle note selection
-  const handleSelectNote = (note) => {
-    setCurrentNote(note);
-    setEditContent(note.content);
+  /* ── markdown toolbar ── */
+  const insert = (pre, suf = '') => {
+    const el = editorRef.current;
+    if (!el) return;
+    const s = el.selectionStart, e2 = el.selectionEnd;
+    const sel = editContent.slice(s, e2);
+    const next = editContent.slice(0, s) + pre + sel + suf + editContent.slice(e2);
+    setEditContent(next);
+    onContent(next);
+    setTimeout(() => { el.focus(); el.setSelectionRange(s + pre.length, e2 + pre.length); }, 0);
   };
 
-  // Handle image upload
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be less than 5MB');
-      return;
-    }
-
-    try {
-      setUploadingImage(true);
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch(`${apiUrl}/api/files/upload/${user.id}/${currentNote.projectId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: formData,
-      });
-
-      if (response.ok) {
-        const fileData = await response.json();
-        const markdownLink = `![${file.name}](${fileData.filePath})`;
-        const newContent = editContent + '\n' + markdownLink + '\n';
-        setEditContent(newContent);
-        autoSaveNote(newContent);
-        setSuccessMessage('Image uploaded');
-        setTimeout(() => setSuccessMessage(''), 2000);
-      } else if (response.status === 401) {
-        navigate('/login');
-      }
-    } catch (err) {
-      setError('Failed to upload image');
-      console.error('Error uploading image:', err);
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  // Handle drag and drop
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.currentTarget.classList.add('drag-over');
-  };
-
-  const handleDragLeave = (e) => {
-    e.currentTarget.classList.remove('drag-over');
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    e.currentTarget.classList.remove('drag-over');
-
-    const files = e.dataTransfer?.files;
-    if (files && files[0]) {
-      const file = files[0];
-      if (file.type.startsWith('image/')) {
-        try {
-          setUploadingImage(true);
-          const formData = new FormData();
-          formData.append('file', file);
-
-          const response = await fetch(
-            `${apiUrl}/api/files/upload/${user.id}/${currentNote?.projectId}`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
-              },
-              body: formData,
-            }
-          );
-
-          if (response.ok) {
-            const fileData = await response.json();
-            const markdownLink = `![${file.name}](${fileData.filePath})`;
-            const newContent = editContent + '\n' + markdownLink + '\n';
-            setEditContent(newContent);
-            autoSaveNote(newContent);
-            setSuccessMessage('Image uploaded');
-            setTimeout(() => setSuccessMessage(''), 2000);
-          }
-        } catch (err) {
-          setError('Failed to upload image');
-          console.error('Error uploading image:', err);
-        } finally {
-          setUploadingImage(false);
-        }
-      }
-    }
-  };
-
-  // Filter and search notes
-  const filteredNotes = notes.filter(note => {
-    const matchesSearch =
-      note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesProject =
-      selectedProject === 'all' || note.projectId === parseInt(selectedProject);
-
-    const matchesTag =
-      selectedTag === '' ||
-      note.content?.includes(selectedTag);
-
-    return matchesSearch && matchesProject && matchesTag;
+  /* ── filter ── */
+  const filtered = notes.filter(n => {
+    const ms = !search
+      || n.title?.toLowerCase().includes(search.toLowerCase())
+      || n.content?.toLowerCase().includes(search.toLowerCase());
+    const mp = filterProj === 'all' || String(n.projectId) === String(filterProj);
+    return ms && mp;
   });
-
-  // Get project name by ID
-  const getProjectName = (projectId) => {
-    return projects.find(p => p.id === projectId)?.title || 'Unassigned';
-  };
-
-  // Group notes by project
-  const groupedNotes = {};
-  filteredNotes.forEach(note => {
-    const projectName = getProjectName(note.projectId);
-    if (!groupedNotes[projectName]) {
-      groupedNotes[projectName] = [];
-    }
-    groupedNotes[projectName].push(note);
-  });
-
-  // Render markdown preview with basic styling
-  const renderMarkdownPreview = () => {
-    try {
-      let html = editContent
-        .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
-        .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
-        .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code>$1</code>')
-        .replace(/^- (.*?)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
-        .replace(/\n/g, '<br>')
-        .replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; border-radius: 8px; margin: 10px 0;">')
-        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
-      return html;
-    } catch (err) {
-      console.error('Error rendering markdown:', err);
-      return '<p>Error rendering preview</p>';
-    }
-  };
 
   return (
-    <div className="notes-container">
-      {/* Navigation */}
-      <nav className="navbar">
-        <div className="nav-content">
-          <h1 className="app-title">
-            <MdMenuBook style={{display: 'inline-block', marginRight: '0.5rem'}} size={28} />
-            Student Workspace
-          </h1>
-          <div className="nav-links">
-            <a href="/dashboard" className="nav-link">Dashboard</a>
-            <a href="/projects" className="nav-link">Projects</a>
-            <a href="/tasks" className="nav-link">Tasks</a>
-            <a href="/notes" className="nav-link active">Notes</a>
-          </div>
-          <div className="nav-right">
-            <div className="user-info">{user?.name}</div>
-            <button
-              className="btn-logout"
-              onClick={() => {
-                localStorage.removeItem('token');
-                navigate('/login');
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
+    <MainLayout pageTitle="Notes">
+      <div className="notes-layout">
 
-      {/* Main Content */}
-      <div className="notes-main">
-        {/* Left Sidebar */}
-        <aside className={`notes-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-          <div className="sidebar-header">
-            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-                boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25)'
-              }}>
-                <MdNote size={24} style={{color: '#e9d5ff'}} />
+        {/* ── Sidebar ── */}
+        <div className={`notes-sidebar${sideOpen ? '' : ' collapsed'}`}>
+          <div className="notes-sidebar-inner">
+
+            {/* Header */}
+            <div className="notes-sidebar-hdr">
+              <h3>Notes ({filtered.length})</h3>
+              <div style={{ display:'flex', gap:'.3rem' }}>
+                <button className="btn btn-primary btn-sm" onClick={openNewForm}>
+                  <IcoPlus size={13} /> New
+                </button>
+                <button className="btn-icon" onClick={() => setSideOpen(false)}>
+                  <IcoX size={15} />
+                </button>
               </div>
-              <h2>Notes</h2>
             </div>
-            <button
-              className="btn-toggle-sidebar"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              title="Toggle sidebar"
-            >
-              {sidebarCollapsed ? '→' : '←'}
-            </button>
-          </div>
 
-          {!sidebarCollapsed && (
-            <>
-              {/* Create Note Button */}
-              <button
-                className="btn-create-note"
-                onClick={() => setShowNewNoteForm(!showNewNoteForm)}
-              >
-                + New Note
-              </button>
-
-              {/* Create Note Form */}
-              {showNewNoteForm && (
-                <div className="create-note-form">
+            {/* New Note Form */}
+            {showNew && (
+              <div className="new-note-form">
+                {error && <div className="form-error">{error}</div>}
+                <div className="form-group">
+                  <label>Title *</label>
                   <input
-                    type="text"
-                    placeholder="Note title..."
-                    value={newNoteTitle}
-                    onChange={(e) => setNewNoteTitle(e.target.value)}
-                    className="form-input"
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    placeholder="Note title…"
+                    autoFocus
+                    onKeyDown={e => e.key === 'Enter' && createNote()}
                   />
-                  <select
-                    value={newNoteProject}
-                    onChange={(e) => setNewNoteProject(e.target.value)}
-                    className="form-select"
-                  >
-                    <option value="">Select project</option>
-                    {projects.map(project => (
-                      <option key={project.id} value={project.id}>
-                        {project.title}
-                      </option>
+                </div>
+                <div className="form-group">
+                  <label>Project *</label>
+                  <select value={newProj} onChange={e => setNewProj(e.target.value)}>
+                    <option value="">Select project…</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
                     ))}
                   </select>
-                  <div className="form-buttons">
-                    <button
-                      className="btn-primary"
-                      onClick={handleCreateNote}
-                      disabled={!newNoteTitle.trim() || !newNoteProject}
-                    >
-                      Create
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        setShowNewNoteForm(false);
-                        setNewNoteTitle('');
-                        setNewNoteProject('');
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  {projects.length === 0 && (
+                    <p className="form-hint">⚠ No projects yet. <a href="/projects">Create one</a> first.</p>
+                  )}
                 </div>
-              )}
+                <div style={{ display:'flex', gap:'.4rem' }}>
+                  <button className="btn btn-primary btn-sm" onClick={createNote}
+                    disabled={!newTitle.trim()}>
+                    Create
+                  </button>
+                  <button className="btn btn-secondary btn-sm"
+                    onClick={() => { setShowNew(false); setError(''); }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
-              {/* Search */}
-              <div className="search-box">
+            {/* Search */}
+            <div className="notes-search-area">
+              <div style={{ position:'relative' }}>
+                <IcoSearch size={13} style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)', color:'var(--txt-3)', pointerEvents:'none' }} />
                 <input
-                  type="text"
-                  placeholder="🔍 Search notes..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="search-input"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search notes…"
+                  style={{ paddingLeft:27, fontSize:'.8rem' }}
                 />
               </div>
+            </div>
 
-              {/* Project Filter */}
-              <div className="filter-section">
-                <div className="filter-label">Filter by Project</div>
-                <select
-                  value={selectedProject}
-                  onChange={(e) => setSelectedProject(e.target.value)}
-                  className="filter-select"
+            {/* Project filter */}
+            <div className="notes-filter-area">
+              <label>Filter by project</label>
+              <select value={filterProj} onChange={e => setFilterProj(e.target.value)}>
+                <option value="all">All projects</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Note list */}
+            <div className="notes-sidebar-body">
+              {loading ? (
+                <div className="loading-wrap" style={{ padding:'1rem' }}>
+                  <div className="spinner" />
+                </div>
+              ) : filtered.length === 0 ? (
+                <div style={{ padding:'1.5rem', textAlign:'center', color:'var(--txt-3)', fontSize:'.83rem' }}>
+                  {notes.length === 0 ? 'No notes yet. Click + New to create one!' : 'No matching notes'}
+                </div>
+              ) : filtered.map(n => (
+                <div
+                  key={n.id}
+                  className={`note-item${current?.id === n.id ? ' active' : ''}`}
+                  onClick={() => setCurrent(n)}
                 >
-                  <option value="all">All Projects</option>
-                  {projects.map(project => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tag Filter */}
-              {tags.length > 0 && (
-                <div className="tags-section">
-                  <div className="tags-label">Tags</div>
-                  <button
-                    className={`tag-button ${selectedTag === '' ? 'active' : ''}`}
-                    onClick={() => setSelectedTag('')}
-                  >
-                    All ({notes.length})
+                  <div className="note-item-body">
+                    <div className="note-item-title">{n.title}</div>
+                    <div className="note-item-preview">
+                      {n.content?.trim() || 'Empty note'}
+                    </div>
+                  </div>
+                  <button className="btn-icon danger" onClick={e => deleteNote(n.id, e)}>
+                    <IcoTrash size={13} />
                   </button>
-                  {tags.map(tag => {
-                    const tagCount = notes.filter(n => n.content?.includes(tag)).length;
-                    return (
-                      <button
-                        key={tag}
-                        className={`tag-button ${selectedTag === tag ? 'active' : ''}`}
-                        onClick={() => setSelectedTag(tag)}
-                      >
-                        {tag} ({tagCount})
-                      </button>
-                    );
-                  })}
                 </div>
-              )}
+              ))}
+            </div>
+          </div>
+        </div>
 
-              {/* Notes List */}
-              <div className="notes-list">
-                {filteredNotes.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">📭</div>
-                    <p>No notes found</p>
-                  </div>
-                ) : (
-                  Object.entries(groupedNotes).map(([projectName, projectNotes]) => (
-                    <div key={projectName} className="notes-group">
-                      <div className="group-title">{projectName}</div>
-                      {projectNotes.map(note => (
-                        <div
-                          key={note.id}
-                          className={`note-item ${currentNote?.id === note.id ? 'active' : ''}`}
-                          onClick={() => handleSelectNote(note)}
-                        >
-                          <div className="note-item-content">
-                            <div className="note-title">{note.title}</div>
-                            <div className="note-preview">
-                              {note.content?.substring(0, 50).replace(/#/g, '').trim()}...
-                            </div>
-                          </div>
-                          <button
-                            className="btn-delete-note"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteNote(note.id);
-                            }}
-                            title="Delete note"
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-        </aside>
-
-        {/* Right Editor */}
-        <div className="editor-container">
-          {currentNote ? (
-            <>
-              <div className="editor-header">
-                <div className="editor-title-section">
-                  <h2 className="editor-title">{currentNote.title}</h2>
-                  <div className="note-meta">
-                    Project: <strong>{getProjectName(currentNote.projectId)}</strong>
-                  </div>
-                </div>
-                {successMessage && <div className="success-badge">{successMessage}</div>}
-              </div>
-
-              <div
-                className="editor-workspace"
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                {uploadingImage && <div className="uploading-overlay">📤 Uploading...</div>}
-
-                {/* Editor */}
-                <div className="editor-split">
-                  <div className="editor-pane">
-                    <div className="pane-header">
-                      <label>📝 Markdown</label>
-                      <div className="editor-toolbar">
-                        <button
-                          className="toolbar-button"
-                          title="Upload image"
-                          onClick={() =>
-                            document.getElementById('image-upload-input')?.click()
-                          }
-                        >
-                          🖼️ Image
-                        </button>
-                        <input
-                          id="image-upload-input"
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          style={{ display: 'none' }}
-                        />
-                      </div>
-                    </div>
-                    <textarea
-                      value={editContent}
-                      onChange={handleContentChange}
-                      className="markdown-editor"
-                      placeholder="# Write your note here...
-
-Use Markdown syntax:
-- **bold** for bold text
-- *italic* for italic text
-- `code` for inline code
-- # Heading 1
-- ## Heading 2
-- [Link](url)
-- ![Image](url)
-
-Use #tags for organization"
-                    />
-                    <div className="editor-hint">💾 Auto-saves after 2 seconds of inactivity</div>
-                  </div>
-
-                  {/* Preview */}
-                  <div className="preview-pane">
-                    <div className="pane-header">
-                      <label>👁️ Preview</label>
-                    </div>
-                    <div
-                      className="markdown-preview"
-                      dangerouslySetInnerHTML={{
-                        __html: renderMarkdownPreview(),
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
+        {/* ── Editor ── */}
+        <div className="notes-editor">
+          {!current ? (
             <div className="empty-editor">
-              <div className="empty-icon">✍️</div>
+              {!sideOpen && (
+                <button className="btn btn-secondary btn-sm"
+                  style={{ marginBottom:'1.25rem' }}
+                  onClick={() => setSideOpen(true)}>
+                  ← Show Notes
+                </button>
+              )}
+              <IcoFileText size={52} />
               <h3>No note selected</h3>
-              <p>Create a new note or select one from the sidebar to start writing</p>
-              <button className="btn-primary" onClick={() => setShowNewNoteForm(true)}>
-                + Create New Note
+              <p>Select a note from the sidebar or create a new one to start writing.</p>
+              {/* FIX: calls openNewForm which also opens sidebar */}
+              <button className="btn btn-primary" onClick={openNewForm}>
+                <IcoPlus size={15} /> Create Note
               </button>
             </div>
+          ) : (
+            <>
+              {/* Top bar */}
+              <div className="editor-topbar">
+                {!sideOpen && (
+                  <button className="btn btn-secondary btn-sm"
+                    onClick={() => setSideOpen(true)}>
+                    ← Notes
+                  </button>
+                )}
+                <input
+                  className="editor-title-input"
+                  value={editTitle}
+                  onChange={e => onTitle(e.target.value)}
+                  placeholder="Note title…"
+                />
+                <div style={{ display:'flex', alignItems:'center', gap:'.5rem', flexShrink:0 }}>
+                  {saving && <span style={{ fontSize:'.7rem', color:'var(--txt-3)' }}>Saving…</span>}
+                  {saved  && <span className="save-badge"><IcoCheck size={11} /> Saved</span>}
+                  <button className="btn btn-secondary btn-sm" onClick={() => setSplit(s => !s)}>
+                    {split ? 'Preview only' : 'Split view'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Markdown toolbar */}
+              <div className="editor-toolbar">
+                {[
+                  { label:'B',       action: () => insert('**','**'), Icon: IcoBold,     title:'Bold' },
+                  { label:'I',       action: () => insert('*','*'),   Icon: IcoItalic,   title:'Italic' },
+                  { label:'Code',    action: () => insert('`','`'),   Icon: IcoCode,     title:'Inline code' },
+                  { label:'List',    action: () => insert('\n- '),    Icon: IcoList,     title:'List item' },
+                  { label:'H1',      action: () => insert('# '),      Icon: IcoTag,      title:'Heading 1' },
+                  { label:'H2',      action: () => insert('## '),     Icon: IcoTag,      title:'Heading 2' },
+                  { label:'Quote',   action: () => insert('> '),      Icon: IcoFileText, title:'Blockquote' },
+                ].map(({ label, action, Icon, title }, i) => (
+                  <React.Fragment key={label}>
+                    {(i === 3 || i === 4) && <div className="toolbar-sep" />}
+                    <button className="toolbar-btn" onClick={action} title={title}>
+                      <Icon size={13} />{label}
+                    </button>
+                  </React.Fragment>
+                ))}
+              </div>
+
+              {/* Editor / Preview */}
+              {split ? (
+                <div className="editor-split">
+                  <div className="editor-pane">
+                    <div className="pane-lbl">Markdown</div>
+                    <textarea
+                      ref={editorRef}
+                      className="markdown-editor"
+                      value={editContent}
+                      onChange={e => onContent(e.target.value)}
+                      placeholder={'Write in Markdown…\n\n# Heading\n**bold** *italic* `code`\n- List item\n> Blockquote'}
+                    />
+                  </div>
+                  <div className="preview-pane">
+                    <div className="pane-lbl">Preview</div>
+                    <div
+                      className="markdown-preview"
+                      dangerouslySetInnerHTML={{ __html: renderMd(editContent) || '<p style="color:var(--txt-3)">Nothing to preview yet…</p>' }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+                  <div className="pane-lbl">Preview</div>
+                  <div
+                    className="markdown-preview"
+                    dangerouslySetInnerHTML={{ __html: renderMd(editContent) || '<p style="color:var(--txt-3)">Nothing to preview…</p>' }}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="error-message">
-          <span>❌ {error}</span>
-          <button onClick={() => setError('')}>✕</button>
-        </div>
-      )}
-
-      {/* Loading Indicator */}
-      {loading && <div className="loading">Loading notes...</div>}
-    </div>
+    </MainLayout>
   );
 };
 
-export { Notes };
 export default Notes;
+export { Notes };

@@ -1,77 +1,74 @@
 import React, { useContext, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import {
+  IcoDashboard, IcoFolder, IcoCheckSquare, IcoFileText,
+  IcoDatabase, IcoTrophy, IcoLogOut, IcoGraduation,
+  IcoChevronLeft, IcoChevronRight
+} from '../utils/icons';
 import '../styles/sidebar.css';
 
-export const Sidebar = () => {
+export const Sidebar = ({ onCollapse }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useContext(AuthContext);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    onCollapse?.(next);
   };
 
-  const isActive = (path) => {
-    return location.pathname === path ? 'active' : '';
-  };
+  const handleLogout = () => { logout(); navigate('/login'); };
 
-  const menuItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/projects', label: 'Projects', icon: '📁' },
-    { path: '/tasks', label: 'Tasks', icon: '✅' },
-    { path: '/notes', label: 'Notes', icon: '📝' },
-    { path: '/files', label: 'Files', icon: '📚' },
-    { path: '/contests', label: 'Contests', icon: '🏆' },
+  const nav = [
+    { path: '/dashboard', label: 'Dashboard', Icon: IcoDashboard },
+    { path: '/projects',  label: 'Projects',  Icon: IcoFolder },
+    { path: '/tasks',     label: 'Tasks',     Icon: IcoCheckSquare },
+    { path: '/notes',     label: 'Notes',     Icon: IcoFileText },
+    { path: '/files',     label: 'Files',     Icon: IcoDatabase },
+    { path: '/contests',  label: 'Contests',  Icon: IcoTrophy },
   ];
 
   return (
-    <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-      {/* Sidebar Header */}
+    <div className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-header">
-        <button
-          className="toggle-btn"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          title={isCollapsed ? 'Expand' : 'Collapse'}
-        >
-          {isCollapsed ? '→' : '←'}
+        <button className="toggle-btn" onClick={toggle}>
+          {collapsed ? <IcoChevronRight size={15} /> : <IcoChevronLeft size={15} />}
         </button>
-        {!isCollapsed && <h2 className="sidebar-title">🎓 Workspace</h2>}
+        <div className="sidebar-brand">
+          <div className="brand-icon"><IcoGraduation size={16} /></div>
+          <span className="sidebar-title">Workspace</span>
+        </div>
       </div>
 
-      {/* User Profile Section */}
       <div className="user-profile">
-        <div className="user-avatar">{user?.name?.charAt(0).toUpperCase()}</div>
-        {!isCollapsed && (
-          <div className="user-info">
-            <p className="user-name">{user?.name}</p>
-            <p className="user-email">{user?.email}</p>
-          </div>
-        )}
+        <div className="user-avatar">{user?.name?.charAt(0).toUpperCase() || 'U'}</div>
+        <div className="user-info">
+          <div className="user-name">{user?.name || 'Student'}</div>
+          <div className="user-email">{user?.email || ''}</div>
+        </div>
       </div>
 
-      {/* Navigation Menu */}
       <nav className="sidebar-menu">
-        {menuItems.map((item) => (
+        {nav.map(({ path, label, Icon }) => (
           <button
-            key={item.path}
-            className={`menu-item ${isActive(item.path)}`}
-            onClick={() => navigate(item.path)}
-            title={item.label}
+            key={path}
+            className={`menu-item${location.pathname === path ? ' active' : ''}`}
+            onClick={() => navigate(path)}
+            title={collapsed ? label : undefined}
           >
-            <span className="menu-icon">{item.icon}</span>
-            {!isCollapsed && <span className="menu-label">{item.label}</span>}
+            <span className="menu-icon"><Icon size={18} /></span>
+            <span className="menu-label">{label}</span>
           </button>
         ))}
       </nav>
 
-      {/* Sidebar Footer */}
       <div className="sidebar-footer">
         <button className="logout-btn" onClick={handleLogout} title="Logout">
-          <span className="logout-icon">🚪</span>
-          {!isCollapsed && <span>Logout</span>}
+          <IcoLogOut size={17} />
+          <span className="logout-label">Logout</span>
         </button>
       </div>
     </div>

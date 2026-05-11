@@ -127,8 +127,8 @@ public class TaskService {
         task.setDescription(taskRequest.getDescription());
         task.setDeadline(taskRequest.getDeadline());
         task.setPriority(taskRequest.getPriority());
-        task.setStatus(TaskStatus.valueOf(taskRequest.getStatus()));
-        task.setTimeSpent(taskRequest.getTimeSpent());
+        task.setStatus(parseStatus(taskRequest.getStatus()));
+        task.setTimeSpent(taskRequest.getTimeSpent() != null ? taskRequest.getTimeSpent() : 0);
         task.setCompleted(taskRequest.getCompleted() != null ? taskRequest.getCompleted() : false);
         task.setUser(user);
 
@@ -152,7 +152,7 @@ public class TaskService {
         task.setDeadline(taskRequest.getDeadline());
         task.setPriority(taskRequest.getPriority());
         if (taskRequest.getStatus() != null) {
-            task.setStatus(TaskStatus.valueOf(taskRequest.getStatus()));
+            task.setStatus(parseStatus(taskRequest.getStatus()));
         }
         if (taskRequest.getTimeSpent() != null) {
             task.setTimeSpent(taskRequest.getTimeSpent());
@@ -172,6 +172,13 @@ public class TaskService {
         }
 
         return taskRepository.save(task);
+    }
+
+    /** Safely parse a status string; defaults to TODO if null/invalid */
+    private TaskStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) return TaskStatus.TODO;
+        try { return TaskStatus.valueOf(status.toUpperCase().replace(" ","_")); }
+        catch (IllegalArgumentException e) { return TaskStatus.TODO; }
     }
 
 }

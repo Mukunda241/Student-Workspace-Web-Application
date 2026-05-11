@@ -1,124 +1,105 @@
 package com.studentworkspace.dto;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
+/**
+ * FIX: startTime and endTime are now returned as ISO-8601 strings WITH explicit
+ * "+05:30" offset so the frontend always knows these are IST times.
+ * e.g. "2026-05-10T08:00:00+05:30"  (never ambiguous UTC vs IST again)
+ */
 public class ContestResponse {
+
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final DateTimeFormatter ISO_IST =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssxxx").withZone(IST);
 
     private Long id;
     private String platform;
     private String contestName;
-    private LocalDateTime startTime;
-    private LocalDateTime endTime;
+    // Changed to String — carries explicit +05:30 offset
+    private String startTime;
+    private String endTime;
     private String url;
     private String logoUrl;
     private boolean reminderSet;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private String createdAt;
+    private String updatedAt;
+    // Keep duration in minutes for frontend display
+    private Long duration;
 
-    // Constructors
-    public ContestResponse() {
-    }
+    public ContestResponse() {}
 
-    public ContestResponse(Long id, String platform, String contestName, LocalDateTime startTime, String url) {
+    public ContestResponse(Long id, String platform, String contestName,
+                           LocalDateTime startTime, String url) {
         this.id = id;
         this.platform = platform;
         this.contestName = contestName;
-        this.startTime = startTime;
+        this.startTime = toIST(startTime);
         this.url = url;
     }
 
-    public ContestResponse(Long id, String platform, String contestName, LocalDateTime startTime, LocalDateTime endTime, String url, String logoUrl, boolean reminderSet, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public ContestResponse(Long id, String platform, String contestName,
+                           LocalDateTime startTime, LocalDateTime endTime,
+                           String url, String logoUrl, boolean reminderSet,
+                           LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.platform = platform;
         this.contestName = contestName;
-        this.startTime = startTime;
-        this.endTime = endTime;
+        this.startTime = toIST(startTime);
+        this.endTime   = toIST(endTime);
         this.url = url;
         this.logoUrl = logoUrl;
         this.reminderSet = reminderSet;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
+        this.createdAt = toIST(createdAt);
+        this.updatedAt = toIST(updatedAt);
+        // Compute duration in minutes if both times present
+        if (startTime != null && endTime != null) {
+            this.duration = java.time.Duration.between(startTime, endTime).toMinutes();
+        }
     }
 
-    // Getters and Setters
-
-    public Long getId() {
-        return id;
+    /** Convert LocalDateTime (assumed IST, no TZ) → ISO string with +05:30 */
+    private static String toIST(LocalDateTime ldt) {
+        if (ldt == null) return null;
+        // The value stored in DB is the IST wall-clock time (e.g. 08:00 IST).
+        // We wrap it in IST zone to produce "2026-05-10T08:00:00+05:30".
+        return ZonedDateTime.of(ldt, IST).format(ISO_IST);
     }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    // Getters / Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public String getPlatform() {
-        return platform;
-    }
+    public String getPlatform() { return platform; }
+    public void setPlatform(String platform) { this.platform = platform; }
 
-    public void setPlatform(String platform) {
-        this.platform = platform;
-    }
+    public String getContestName() { return contestName; }
+    public void setContestName(String contestName) { this.contestName = contestName; }
 
-    public String getContestName() {
-        return contestName;
-    }
+    public String getStartTime() { return startTime; }
+    public void setStartTime(String startTime) { this.startTime = startTime; }
 
-    public void setContestName(String contestName) {
-        this.contestName = contestName;
-    }
+    public String getEndTime() { return endTime; }
+    public void setEndTime(String endTime) { this.endTime = endTime; }
 
-    public LocalDateTime getStartTime() {
-        return startTime;
-    }
+    public String getUrl() { return url; }
+    public void setUrl(String url) { this.url = url; }
 
-    public void setStartTime(LocalDateTime startTime) {
-        this.startTime = startTime;
-    }
+    public String getLogoUrl() { return logoUrl; }
+    public void setLogoUrl(String logoUrl) { this.logoUrl = logoUrl; }
 
-    public LocalDateTime getEndTime() {
-        return endTime;
-    }
+    public boolean isReminderSet() { return reminderSet; }
+    public void setReminderSet(boolean reminderSet) { this.reminderSet = reminderSet; }
 
-    public void setEndTime(LocalDateTime endTime) {
-        this.endTime = endTime;
-    }
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 
-    public String getUrl() {
-        return url;
-    }
+    public String getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
 
-    public void setUrl(String url) {
-        this.url = url;
-    }
-
-    public String getLogoUrl() {
-        return logoUrl;
-    }
-
-    public void setLogoUrl(String logoUrl) {
-        this.logoUrl = logoUrl;
-    }
-
-    public boolean isReminderSet() {
-        return reminderSet;
-    }
-
-    public void setReminderSet(boolean reminderSet) {
-        this.reminderSet = reminderSet;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
+    public Long getDuration() { return duration; }
+    public void setDuration(Long duration) { this.duration = duration; }
 }

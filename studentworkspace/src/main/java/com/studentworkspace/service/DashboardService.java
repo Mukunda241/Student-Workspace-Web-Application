@@ -1,6 +1,9 @@
 package com.studentworkspace.service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -79,9 +82,17 @@ public class DashboardService {
                 .mapToInt(t -> t.getTimeSpent() != null ? t.getTimeSpent() : 0)
                 .sum();
 
-        // Count ongoing projects
+        // Count active/ongoing projects — status can be ACTIVE, PLANNING, or ON_HOLD
         Long ongoingProjects = projectRepository.findByUserId(userId).stream()
-                .filter(p -> "Ongoing".equals(p.getStatus()))
+                .filter(p -> {
+                    String s = p.getStatus();
+                    return s != null && (
+                        s.equalsIgnoreCase("ACTIVE") ||
+                        s.equalsIgnoreCase("Ongoing") ||
+                        s.equalsIgnoreCase("PLANNING") ||
+                        s.equalsIgnoreCase("ON_HOLD")
+                    );
+                })
                 .count();
 
         return new DashboardResponse.UserStatsDTO(totalTasks, completedTasks, totalTimeSpent, ongoingProjects);
@@ -117,14 +128,23 @@ public class DashboardService {
         // Fetch upcoming contests from ContestRepository
         List<Contest> contests = contestRepository.findUpcomingContests(LocalDateTime.now());
         
+        final ZoneId IST = ZoneId.of("Asia/Kolkata");
+        final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssxxx").withZone(IST);
+
         return contests.stream()
                 .limit(5)
-                .map(c -> new DashboardResponse.UpcomingContestDTO(
+                .map(c -> {
+                    // Convert LocalDateTime (wall-clock IST) → ISO string with +05:30 offset
+                    String startIst = c.getStartTime() != null
+                        ? ZonedDateTime.of(c.getStartTime(), IST).format(FMT)
+                        : null;
+                    return new DashboardResponse.UpcomingContestDTO(
                         c.getId(),
                         c.getPlatform(),
                         c.getContestName(),
-                        c.getStartTime().toString()
-                ))
+                        startIst
+                    );
+                })
                 .collect(Collectors.toList());
     }
 }

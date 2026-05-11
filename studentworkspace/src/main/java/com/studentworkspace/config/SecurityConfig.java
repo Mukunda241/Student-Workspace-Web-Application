@@ -35,6 +35,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/contests", "/api/contests/**").permitAll()
                 .requestMatchers("/api/dashboard/**").permitAll()
                 .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/webjars/**").permitAll()
+                .requestMatchers("/api/pomodoro/**").permitAll()
+                .requestMatchers("/api/files/download/**").permitAll()
                 
                 // All other endpoints require authentication
                 .anyRequest().authenticated()

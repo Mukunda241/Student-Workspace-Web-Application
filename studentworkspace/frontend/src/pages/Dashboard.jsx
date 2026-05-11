@@ -2,317 +2,241 @@ import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { MainLayout } from '../components/MainLayout';
-import { MdToday, MdEmojiEvents, MdHourglassEmpty, MdTaskAlt, MdCheckCircle, MdAccessTime, MdFolder } from 'react-icons/md';
 import PomodoroTimer from '../components/PomodoroTimer';
 import api from '../services/api';
+import {
+  IcoCheckSquare, IcoClock, IcoFolder, IcoTrophy,
+  IcoBarChart, IcoPlus, IcoAlert
+} from '../utils/icons';
 import '../styles/dashboard.css';
+
+/**
+ * Backend now emits ISO-8601 with explicit +05:30 offset.
+ * e.g. "2026-05-10T08:00:00+05:30" — new Date() parses this correctly.
+ */
+const fmtIST = (d) => {
+  if (!d) return '';
+  try {
+    return new Date(d).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    }) + ' IST';
+  } catch { return String(d); }
+};
+
+const countdownIST = (d) => {
+  if (!d) return { label: 'TBD', cls: '' };
+  try {
+    const diff = new Date(d) - Date.now();
+    if (diff <= 0) return { label: '🔴 Live!', cls: 'live' };
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    if (h < 24) return { label: `${h}h ${m}m`, cls: h < 2 ? 'warn' : '' };
+    return { label: `${Math.floor(h/24)}d ${h%24}h`, cls: '' };
+  } catch { return { label: 'TBD', cls: '' }; }
+};
 
 export const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, logout } = useContext(AuthContext);
-  const [dashboardData, setDashboardData] = useState(null);
+  const { user } = useContext(AuthContext);
+  const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error,   setError]   = useState('');
 
-  // Fetch dashboard data on component mount
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        if (!user || !user.id) {
-          setError('User not authenticated');
-          setLoading(false);
-          return;
-        }
+    if (!user?.id) return;
+    api.get(`/api/dashboard/summary/${user.id}`)
+      .then(r => { setData(r.data); setError(''); })
+      .catch(e => {
+        console.error('Dashboard error:', e);
+        setError('Could not load dashboard data');
+      })
+      .finally(() => setLoading(false));
+  }, [user?.id]);
 
-        const response = await api.get(`/api/dashboard/summary/${user.id}`);
-        setDashboardData(response.data);
-      } catch (err) {
-        setError(err.message || 'Failed to fetch dashboard data');
-        console.error('Dashboard fetch error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // ─── FIX: The API returns data.userStats.totalTasks etc (nested)
+  // Previous code read data.totalTasks which is always undefined → shows 0
+  const stats_raw   = data?.userStats || {};
+  const urgentTasks = data?.urgentTasks || [];
+  // Use API contests; fallback to localStorage cache from Contests page
+  const apiContests = data?.upcomingContests || [];
+  const cachedContests = React.useMemo(() => {
+    try {
+      const raw = localStorage.getItem('contestData');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }, []);
+  const contests = apiContests.length > 0 ? apiContests : cachedContests.slice(0, 5);
 
-    if (user && user.id) {
-      fetchDashboardData();
-    }
-  }, [user]);
+  const totalTasks      = stats_raw.totalTasks      ?? 0;
+  const completedTasks  = stats_raw.completedTasks  ?? 0;
+  const totalTimeSpent  = stats_raw.totalTimeSpent  ?? 0; // in minutes
+  const ongoingProjects = stats_raw.ongoingProjects ?? 0;
+  const completionRate  = totalTasks > 0
+    ? Math.round((completedTasks / totalTasks) * 100)
+    : 0;
 
-  // Calculate progress percentage
-  const calculateProgress = (completed, total) => {
-    return total > 0 ? Math.round((completed / total) * 100) : 0;
-  };
+  const isOverdue = (d) => d && new Date(d) < new Date();
 
-  // Format time in hours
-  const formatHours = (minutes) => {
-    return (minutes / 60).toFixed(1);
-  };
+  const statCards = [
+    {
+      Icon: IcoCheckSquare, cls: 'indigo',
+      lbl: 'Total Tasks',
+      val: totalTasks,
+      sub: totalTasks === 0 ? 'No tasks yet' : `${totalTasks} created`,
+    },
+    {
+      Icon: IcoBarChart, cls: 'green',
+      lbl: 'Completed',
+      val: completedTasks,
+      sub: totalTasks === 0 ? 'Start by creating tasks' : `${completionRate}% completion rate`,
+    },
+    {
+      Icon: IcoClock, cls: 'amber',
+      lbl: 'Study Hours',
+      val: `${(totalTimeSpent / 60).toFixed(1)}h`,
+      sub: totalTimeSpent === 0 ? 'No time logged yet' : 'total time invested',
+    },
+    {
+      Icon: IcoFolder, cls: 'blue',
+      lbl: 'Active Projects',
+      val: ongoingProjects,
+      sub: ongoingProjects === 0 ? 'No active projects' : 'ongoing projects',
+    },
+  ];
 
-  // Get urgency color for tasks
-  const getUrgencyColor = (deadline) => {
-    if (!deadline) return 'normal';
-    const due = new Date(deadline);
-    const today = new Date();
-    const daysUntil = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
-
-    if (daysUntil < 1) return 'urgent';
-    if (daysUntil < 3) return 'warning';
-    return 'normal';
-  };
-
-  // Format deadline display
-  const formatDeadline = (deadline) => {
-    if (!deadline) return 'No deadline';
-    const due = new Date(deadline);
-    const today = new Date();
-    const daysUntil = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
-    
-    if (daysUntil < 0) return 'Overdue';
-    if (daysUntil === 0) return 'Due today';
-    if (daysUntil === 1) return 'Due tomorrow';
-    return `Due in ${daysUntil} days`;
-  };
+  const quickActions = [
+    { label: '+ New Project',   path: '/projects', Icon: IcoFolder },
+    { label: '+ New Task',      path: '/tasks',    Icon: IcoCheckSquare },
+    { label: '+ New Note',      path: '/notes',    Icon: IcoBarChart },
+    { label: 'Browse Contests', path: '/contests', Icon: IcoTrophy },
+  ];
 
   return (
-    <MainLayout>
-      <div className="dashboard-container page-container">
-        {/* Welcome Banner */}
-        <section className="welcome-banner">
-          <h2>Welcome back, {user?.name}! 👋</h2>
-          <p>Here's your academic dashboard at a glance</p>
-        </section>
+    <MainLayout pageTitle="Dashboard">
+      <div className="dashboard-wrap">
 
-        {loading && (
-          <div className="loading">
-            <span>Loading your dashboard</span>
-          </div>
-        )}
-        {error && (
-          <div className="error-message">
-            <span>⚠️ {error}</span>
-          </div>
-        )}
+        {/* Welcome banner */}
+        <div className="welcome-banner">
+          <h2>Welcome back, {user?.name?.split(' ')[0] || 'Student'} 👋</h2>
+          <p>Here's your academic overview for today</p>
+        </div>
 
-        {!loading && dashboardData && (
+        {loading ? (
+          <div className="loading-wrap"><div className="spinner" /> Loading dashboard…</div>
+        ) : (
           <>
-            {/* Stats Row */}
-            <section className="stats-row">
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <MdTaskAlt size={28} />
-                </div>
-                <div className="stat-content">
-                  <h3>Total Tasks</h3>
-                  <p className="stat-value">{dashboardData.userStats?.totalTasks || 0}</p>
-                  <span className="stat-label">Tasks created</span>
-                </div>
+            {error && (
+              <div className="error-msg" style={{ marginBottom:'1rem' }}>
+                {error} — some stats may be unavailable.
               </div>
+            )}
 
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <MdCheckCircle size={28} />
-                </div>
-                <div className="stat-content">
-                  <h3>Tasks Completed</h3>
-                  <p className="stat-value">{dashboardData.userStats?.completedTasks || 0}</p>
-                  <span className="stat-label">Completion rate: {dashboardData.userStats?.totalTasks > 0 ? calculateProgress(dashboardData.userStats?.completedTasks, dashboardData.userStats?.totalTasks) : 0}%</span>
-                </div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <MdAccessTime size={28} />
-                </div>
-                <div className="stat-content">
-                  <h3>Study Hours</h3>
-                  <p className="stat-value">{formatHours(dashboardData.userStats?.totalTimeSpent || 0)}h</p>
-                  <span className="stat-label">Total time invested</span>
-                </div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon">
-                  <MdFolder size={28} />
-                </div>
-                <div className="stat-content">
-                  <h3>Ongoing Projects</h3>
-                  <p className="stat-value">{dashboardData.userStats?.ongoingProjects || 0}</p>
-                  <span className="stat-label">Active projects</span>
-                </div>
-              </div>
-            </section>
-
-            {/* Main Content Grid */}
-            <section className="dashboard-grid">
-              {/* Urgent Tasks Card */}
-              <div className="dashboard-card large">
-                <div className="card-header">
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '14px',
-                    background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
-                    marginRight: '0.75rem',
-                    flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
-                  }}>
-                    <MdToday size={32} style={{color: '#60a5fa'}} />
+            {/* ── Stats row ── */}
+            <div className="stats-row">
+              {statCards.map(({ Icon, cls, lbl, val, sub }) => (
+                <div key={lbl} className="stat-card card-hover">
+                  <div className={`stat-icon-wrap ${cls}`}><Icon size={22} /></div>
+                  <div>
+                    <div className="stat-lbl">{lbl}</div>
+                    <div className="stat-val">{val}</div>
+                    <div className="stat-sub">{sub}</div>
                   </div>
-                  <h3>Urgent Tasks</h3>
-                  <button onClick={() => navigate('/tasks')} className="btn-view">View All</button>
                 </div>
-                <div className="tasks-list">
-                  {dashboardData.urgentTasks && dashboardData.urgentTasks.length > 0 ? (
-                    dashboardData.urgentTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className={`task-item urgency-${getUrgencyColor(task.deadline)}`}
-                        onClick={() => navigate(`/tasks/${task.id}`)}
-                      >
-                        <div className="task-priority">
-                          <span className={`priority-badge ${task.priority?.toLowerCase() || 'normal'}`}>
-                            {task.priority || 'Normal'}
-                          </span>
-                        </div>
-                        <div className="task-details">
-                          <h4>{task.title}</h4>
-                          <span className="due-date">{formatDeadline(task.deadline)}</span>
+              ))}
+            </div>
+
+            {/* ── Main grid ── */}
+            <div className="dash-grid">
+
+              {/* Urgent Tasks */}
+              <div className="dash-card">
+                <div className="card-hdr">
+                  <h3><IcoAlert size={16} />Urgent Tasks</h3>
+                  <button className="btn-view" onClick={() => navigate('/tasks')}>View All</button>
+                </div>
+                <div className="urgent-list">
+                  {urgentTasks.length === 0 ? (
+                    <div className="empty-card">
+                      <span style={{ fontSize:'1.5rem' }}>🎉</span>
+                      <span>No urgent tasks — you're all caught up!</span>
+                    </div>
+                  ) : urgentTasks.slice(0, 5).map(t => (
+                    <div
+                      key={t.id}
+                      className={`urgent-item${isOverdue(t.deadline) ? ' overdue' : ''}`}
+                      onClick={() => navigate('/tasks')}
+                    >
+                      <span className={`urgent-pri ${(t.priority || 'medium').toLowerCase()}`}>
+                        {t.priority || 'MED'}
+                      </span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div className="urgent-title">{t.title}</div>
+                        <div className="urgent-due">
+                          {t.deadline
+                            ? (isOverdue(t.deadline) ? '⚠ Overdue' : `Due ${t.deadline}`)
+                            : 'No deadline'}
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <p className="empty-message">No urgent tasks - Great job! 🎉</p>
-                  )}
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Upcoming Contests Card */}
-              <div className="dashboard-card">
-                <div className="card-header">
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '14px',
-                    background: 'linear-gradient(135deg, #047857 0%, #065f46 100%)',
-                    marginRight: '0.75rem',
-                    flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)'
-                  }}>
-                    <MdEmojiEvents size={32} style={{color: '#6ee7b7'}} />
-                  </div>
-                  <h3>Upcoming Contests</h3>
-                  <button onClick={() => navigate('/contests')} className="btn-view">View All</button>
+              {/* Upcoming Contests — FIX: times displayed in IST */}
+              <div className="dash-card">
+                <div className="card-hdr">
+                  <h3><IcoTrophy size={16} />Upcoming Contests</h3>
+                  <button className="btn-view" onClick={() => navigate('/contests')}>View All</button>
                 </div>
                 <div className="contests-list">
-                  {dashboardData.upcomingContests && dashboardData.upcomingContests.length > 0 ? (
-                    dashboardData.upcomingContests.map((contest) => {
-                      const startTime = new Date(contest.startTime);
-                      const now = new Date();
-                      const timeUntil = Math.ceil((startTime - now) / (1000 * 60));
-                      const hours = Math.floor(timeUntil / 60);
-                      const minutes = timeUntil % 60;
-
-                      return (
-                        <div
-                          key={contest.id}
-                          className="contest-item"
-                        >
-                          <div className="contest-header">
-                            <h4>{contest.contestName}</h4>
-                            <span className={`platform-badge ${contest.platform?.toLowerCase().replace('.', '-')}`}>
-                              {contest.platform}
-                            </span>
-                          </div>
-                          <div className="contest-countdown">
-                            {timeUntil > 0 ? (
-                              <p>Starts in: <strong>{hours}h {minutes}m</strong></p>
-                            ) : (
-                              <p className="live">🔴 LIVE NOW</p>
-                            )}
-                          </div>
-                          <span className="contest-time">{new Date(contest.startTime).toLocaleDateString()} {new Date(contest.startTime).toLocaleTimeString()}</span>
+                  {contests.length === 0 ? (
+                    <div className="empty-card">
+                      <IcoTrophy size={28} style={{ color:'var(--sl-300)' }} />
+                      <span>No upcoming contests found</span>
+                    </div>
+                  ) : contests.slice(0, 4).map(c => {
+                    const displayName = c.contestName || c.name || 'Contest';
+                    const { label, cls } = countdownIST(c.startTime);
+                    return (
+                      <div key={c.id} className="contest-item">
+                        <div className="contest-hdr">
+                          <div className="contest-name">{displayName}</div>
+                          <span className="platform-chip">{c.platform}</span>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <p className="empty-message">No contests this week</p>
-                  )}
+                        {cls === 'live'
+                          ? <div className="contest-time-txt live-badge">{label}</div>
+                          : <div className="contest-time-txt">Starts in: <strong>{label}</strong></div>
+                        }
+                        {c.startTime && (
+                          <div style={{ fontSize:'.69rem', color:'var(--txt-3)' }}>
+                            {fmtIST(c.startTime)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Quick Actions Card */}
-              <div className="dashboard-card">
-                <div className="card-header">
-                  <h3>⚡ Quick Actions</h3>
+              {/* Quick Actions + Pomodoro */}
+              <div className="dash-card">
+                <div className="card-hdr"><h3><IcoPlus size={16} />Quick Actions</h3></div>
+                <div className="quick-list">
+                  {quickActions.map(({ label, path, Icon }) => (
+                    <button key={path} className="quick-btn" onClick={() => navigate(path)}>
+                      <Icon size={15} />{label}
+                    </button>
+                  ))}
                 </div>
-                <div className="quick-actions">
-                  <button
-                    onClick={() => navigate('/projects')}
-                    className="quick-action-btn"
-                  >
-                    ➕ New Project
-                  </button>
-                  <button
-                    onClick={() => navigate('/tasks')}
-                    className="quick-action-btn"
-                  >
-                    ➕ New Task
-                  </button>
-                  <button
-                    onClick={() => navigate('/notes')}
-                    className="quick-action-btn"
-                  >
-                    ➕ New Note
-                  </button>
-                  <button
-                    onClick={() => navigate('/contests')}
-                    className="quick-action-btn"
-                  >
-                    🏆 Browse Contests
-                  </button>
+                <div style={{ padding:'0 .75rem .875rem' }}>
+                  <PomodoroTimer />
                 </div>
               </div>
 
-              {/* Pomodoro Timer Card */}
-              <div className="dashboard-card">
-                <div className="card-header">
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '14px',
-                    background: 'linear-gradient(135deg, #b45309 0%, #92400e 100%)',
-                    marginRight: '0.75rem',
-                    flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(180, 83, 9, 0.25)'
-                  }}>
-                    <MdHourglassEmpty size={32} style={{color: '#fcd34d'}} />
-                  </div>
-                  <h3>Pomodoro Timer</h3>
-                </div>
-                <PomodoroTimer />
-              </div>
-            </section>
+            </div>
           </>
-        )}
-
-        {!loading && !dashboardData && !error && (
-          <div className="empty-state">
-            <h3>Welcome to Student Workspace!</h3>
-            <p>Start by creating a project to organize your academic work.</p>
-            <button onClick={() => navigate('/projects')} className="btn-primary">
-              Create Your First Project
-            </button>
-          </div>
         )}
       </div>
     </MainLayout>
