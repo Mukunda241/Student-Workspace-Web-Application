@@ -51,16 +51,16 @@ public class SecurityConfig {
         
         // Allow requests from React frontend (development)
         configuration.setAllowedOrigins(Arrays.asList(
-            "http://localhost:3000",           // Local development
-            "http://127.0.0.1:3000",           // Alternative localhost
-            "http://localhost:3001",           // Local development (alt port)
-            "http://127.0.0.1:3001",           // Alternative localhost (alt port)
-            "http://localhost:3002",           // Local development (current port)
-            "http://127.0.0.1:3002",           // Alternative localhost (current port)
-            "http://localhost:8082"            // Fallback
-            // Add production URL when deployed:
-            // "https://yourdomain.com"
-        ));
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
+    "http://localhost:8082",
+
+    "https://studentworkspace-frontend.onrender.com"
+));
         
         // Allow all HTTP methods
         configuration.setAllowedMethods(Arrays.asList(
