@@ -96,15 +96,16 @@ frontend/
 
 Located: `frontend/.env`
 
+**Local Development:**
 ```
 REACT_APP_API_BASE_URL=http://localhost:8082
-REACT_APP_API_TIMEOUT=5000
+REACT_APP_API_TIMEOUT=30000
 ```
 
-**For Production:**
+**Production (Vercel):**
 ```
-REACT_APP_API_BASE_URL=https://api.yourdomain.com
-REACT_APP_API_TIMEOUT=5000
+REACT_APP_API_BASE_URL=https://studentworkspace-api.onrender.com
+REACT_APP_API_TIMEOUT=30000
 ```
 
 ⚠️ **Important:** 

@@ -106,7 +106,8 @@ export const Contests = () => {
 
     try {
       // Fetch from backend which has IST-corrected times
-      const res = await fetch('http://localhost:8082/api/contests/upcoming', {
+      const apiBase = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8082';
+      const res = await fetch(`${apiBase}/api/contests/upcoming`, {
         headers: { 'Accept': 'application/json' },
       });
 
